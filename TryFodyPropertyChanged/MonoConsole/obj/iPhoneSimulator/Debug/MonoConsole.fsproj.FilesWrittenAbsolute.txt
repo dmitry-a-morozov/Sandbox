@@ -1,0 +1,6 @@
+/Users/dmorozov/Documents/Sandbox/TryFodyPropertyChanged/MonoConsole/obj/iPhoneSimulator/Debug/.NETFramework,Version=v4.0.AssemblyAttribute.fs
+/Users/dmorozov/Documents/Sandbox/TryFodyPropertyChanged/MonoConsole/bin/Debug/MonoConsole.exe.mdb
+/Users/dmorozov/Documents/Sandbox/TryFodyPropertyChanged/MonoConsole/bin/Debug/MonoConsole.exe
+/Users/dmorozov/Documents/Sandbox/TryFodyPropertyChanged/MonoConsole/obj/iPhoneSimulator/Debug/MonoConsole.exe
+/Users/dmorozov/Documents/Sandbox/TryFodyPropertyChanged/MonoConsole/obj/iPhoneSimulator/Debug/MonoConsole.exe.mdb
+/Users/dmorozov/Documents/Sandbox/TryFodyPropertyChanged/MonoConsole/bin/Debug/PropertyChanged.dll

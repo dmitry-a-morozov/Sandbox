@@ -1,0 +1,15 @@
+﻿<Properties>
+  <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug|iPhoneSimulator" />
+  <MonoDevelop.Ide.Workbench ActiveDocument="MonoConsole/Program.fs">
+    <Files>
+      <File FileName="MonoConsole/Program.fs" Line="58" Column="58" />
+    </Files>
+  </MonoDevelop.Ide.Workbench>
+  <MonoDevelop.Ide.DebuggingService.Breakpoints>
+    <BreakpointStore>
+      <Breakpoint file="/Users/dmorozov/Documents/TryFodyPropertyChanged/TryFodyPropertyChanged/AppDelegate.fs" line="26" column="1" />
+      <Breakpoint file="/Users/dmorozov/Documents/TryFodyPropertyChanged/TryFodyPropertyChanged/AppDelegate.fs" line="24" column="1" />
+    </BreakpointStore>
+  </MonoDevelop.Ide.DebuggingService.Breakpoints>
+  <MonoDevelop.Ide.DebuggingService.PinnedWatches />
+</Properties>
