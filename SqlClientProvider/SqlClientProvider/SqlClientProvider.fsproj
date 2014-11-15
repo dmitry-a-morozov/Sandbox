@@ -55,7 +55,6 @@
     <None Include="Test.fsx" />
     <Compile Include="ProvidedTypes.fsi" />
     <Compile Include="ProvidedTypes.fs" />
-    <Compile Include="DebugProvidedTypes.fs" />
     <Compile Include="SqlClientProvider.fs" />
     <Content Include="packages.config" />
   </ItemGroup>

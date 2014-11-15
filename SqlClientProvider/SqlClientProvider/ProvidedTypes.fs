@@ -1,5 +1,4 @@
 #nowarn "40"
-#nowarn "52"
 // Based on code for the F# 3.0 Developer Preview release of September 2011,
 // Copyright (c) Microsoft Corporation 2005-2012.
 // This sample code is provided "as is" without warranty of any kind. 
@@ -332,7 +331,7 @@ module internal Misc =
 
     let RightPipe = <@@ (|>) @@>
     let inlineRightPipe expr = 
-        let rec loop expr = traverse loopCore expr
+        let rec loop = traverse loopCore
         and loopCore fallback orig = 
             match orig with
             | DP.SpecificCall RightPipe (None, _, [operand; applicable]) ->
@@ -350,7 +349,7 @@ module internal Misc =
 
     let inlineValueBindings e = 
         let map = Dictionary(HashIdentity.Reference)
-        let rec loop expr = traverse loopCore expr
+        let rec loop = traverse loopCore
         and loopCore fallback orig = 
             match orig with
             | P.Let(id, (P.Value(_) as v), body) when not id.IsMutable ->
@@ -367,7 +366,7 @@ module internal Misc =
 
 
     let optimizeCurriedApplications expr = 
-        let rec loop expr = traverse loopCore expr
+        let rec loop = traverse loopCore
         and loopCore fallback orig = 
             match orig with
             | P.Application(e, arg) -> 
@@ -576,6 +575,8 @@ type ProvidedMethod(methodName: string, parameters: ProvidedParameter list, retu
     let mutable declaringType : Type = null
     let mutable methodAttrs   = MethodAttributes.Public
     let mutable invokeCode    = None : option<Quotations.Expr list -> Quotations.Expr>
+    let mutable staticParams = [ ] 
+    let mutable staticParamsApply = None
 
     let customAttributesImpl = CustomAttributesImpl()
     member this.AddXmlDocComputed xmlDoc                    = customAttributesImpl.AddXmlDocComputed xmlDoc
@@ -603,6 +604,25 @@ type ProvidedMethod(methodName: string, parameters: ProvidedParameter list, retu
             | None -> invokeCode <- Some q
             | Some _ -> failwith (sprintf "ProvidedConstructor: code already given for %s on type %s" this.Name (if declaringType=null then "<not yet known type>" else declaringType.FullName))
 
+
+    /// Abstract a type to a parametric-type. Requires "formal parameters" and "instantiation function".
+    member this.DefineStaticParameters(staticParameters : list<ProvidedStaticParameter>, apply    : (string -> obj[] -> ProvidedMethod)) =
+        staticParams      <- staticParameters 
+        staticParamsApply <- Some apply
+
+    /// Get ParameterInfo[] for the parametric type parameters (//s GetGenericParameters)
+    member this.GetStaticParameters() = [| for p in staticParams -> p :> ParameterInfo |]
+
+    /// Instantiate parametrics type
+    member this.ApplyStaticArguments(mangledName:string, args:obj[]) =
+        if staticParams.Length>0 then
+            if staticParams.Length <> args.Length then
+                failwith (sprintf "ProvidedTypeDefinition: expecting %d static parameters but given %d for method %s" staticParams.Length args.Length methodName)
+            match staticParamsApply with
+            | None -> failwith "ProvidedTypeDefinition: DefineStaticParameters was not called"
+            | Some f -> f mangledName args
+        else
+            failwith (sprintf "ProvidedTypeDefinition: static parameters supplied but not expected for method %s" methodName)
 
     member this.GetInvokeCodeInternal isGenerated =
         match invokeCode with
@@ -842,7 +862,6 @@ type ProvidedField(fieldName:string,fieldType:Type) =
     override this.FieldHandle = notRequired "FieldHandle" this.Name
 
 /// Represents the type constructor in a provided symbol type.
-[<NoComparison>]
 type SymbolKind = 
     | SDArray 
     | Array of int 
@@ -1128,7 +1147,7 @@ type ProvidedMeasureBuilder() =
 
 
 
-[<RequireQualifiedAccess; NoComparison>]
+[<RequireQualifiedAccess>]
 type TypeContainer =
   | Namespace of Assembly * string // namespace
   | Type of System.Type
@@ -1315,7 +1334,7 @@ type ProvidedTypeDefinition(container:TypeContainer,className : string, baseType
     member this.GetStaticParameters() = [| for p in staticParams -> p :> ParameterInfo |]
 
     /// Instantiate parametrics type
-    member this.MakeParametricType(name:string,args:obj[]) =
+    member this.ApplyStaticArguments(name:string,args:obj[]) =
         if staticParams.Length>0 then
             if staticParams.Length <> args.Length then
                 failwith (sprintf "ProvidedTypeDefinition: expecting %d static parameters but given %d for type %s" staticParams.Length args.Length (fullName.Force()))
@@ -2457,6 +2476,19 @@ type TypeProviderForNamespaces(namespacesAndTypes : list<(string * list<Provided
     // FSharp.Data addition: this method is used by Debug.fs
     member __.Namespaces = Seq.readonly otherNamespaces
     member self.Invalidate() = invalidateE.Trigger(self,EventArgs())
+
+    member this.GetStaticParametersForMethod(mb: MethodBase) =
+        printfn "In GetStaticParametersForMethod"
+        match mb with
+        | :? ProvidedMethod as t -> t.GetStaticParameters()
+        | _ -> [| |]
+
+    member this.ApplyStaticArgumentsForMethod(mb: MethodBase, mangledName, objs) = 
+        printfn "In ApplyStaticArgumentsForMethod"
+        match mb with
+        | :? ProvidedMethod as t -> t.ApplyStaticArguments(mangledName, objs) :> MethodBase
+        | _ -> failwith (sprintf "ApplyStaticArguments: static parameters for method %s are unexpected" mb.Name)
+
     interface ITypeProvider with
         [<CLIEvent>]
         override this.Invalidate = invalidateE.Publish
@@ -2524,10 +2556,11 @@ type TypeProviderForNamespaces(namespacesAndTypes : list<(string * list<Provided
                     [| |]
             | _ -> [| |]
 
+
         override this.ApplyStaticArguments(ty,typePathAfterArguments:string[],objs) = 
             let typePathAfterArguments = typePathAfterArguments.[typePathAfterArguments.Length-1]
             match ty with
-            | :? ProvidedTypeDefinition as t -> (t.MakeParametricType(typePathAfterArguments,objs) :> Type)
+            | :? ProvidedTypeDefinition as t -> (t.ApplyStaticArguments(typePathAfterArguments,objs) :> Type)
             | _ -> failwith (sprintf "ApplyStaticArguments: static params for type %s are unexpected" ty.FullName)
 
 #if FX_NO_LOCAL_FILESYSTEM

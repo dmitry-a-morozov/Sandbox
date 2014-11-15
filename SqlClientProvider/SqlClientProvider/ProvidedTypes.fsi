@@ -23,6 +23,17 @@ type ProvidedParameter =
     new : parameterName: string * parameterType: Type * ?isOut:bool * ?optionalValue:obj -> ProvidedParameter
     member IsParamArray : bool with get,set
 
+/// Represents a provided static parameter.
+type ProvidedStaticParameter =
+    inherit System.Reflection.ParameterInfo
+    new : parameterName: string * parameterType:Type * ?parameterDefaultValue:obj -> ProvidedStaticParameter
+
+    /// Add XML documentation information to this provided constructor
+    member AddXmlDoc            : xmlDoc: string -> unit    
+
+    /// Add XML documentation information to this provided constructor, where the computation of the documentation is delayed until necessary
+    member AddXmlDocDelayed   : xmlDocFunction: (unit -> string) -> unit   
+
 /// Represents an erased provided constructor.
 type ProvidedConstructor =    
     inherit System.Reflection.ConstructorInfo
@@ -99,6 +110,9 @@ type ProvidedMethod =
 
     /// Add a custom attribute to the provided method definition.
     member AddCustomAttribute : CustomAttributeData -> unit
+
+    // Parametric types
+    member DefineStaticParameters     : parameters: ProvidedStaticParameter list * instantiationFunction: (string -> obj[] -> ProvidedMethod) -> unit
 
 
 
@@ -217,7 +231,6 @@ type ProvidedField =
 
 /// FSharp.Data addition: SymbolKind is used by AssemblyReplacer.fs
 /// Represents the type constructor in a provided symbol type.
-[<NoComparison>]
 type SymbolKind = 
     | SDArray 
     | Array of int 
@@ -274,17 +287,6 @@ type ProvidedMeasureBuilder =
     /// e.g. float<kg>, Vector<int, kg>
     member AnnotateType : basic: System.Type * argument: System.Type list -> System.Type
 
-
-/// Represents a provided static parameter.
-type ProvidedStaticParameter =
-    inherit System.Reflection.ParameterInfo
-    new : parameterName: string * parameterType:Type * ?parameterDefaultValue:obj -> ProvidedStaticParameter
-
-    /// Add XML documentation information to this provided constructor
-    member AddXmlDoc            : xmlDoc: string -> unit    
-
-    /// Add XML documentation information to this provided constructor, where the computation of the documentation is delayed until necessary
-    member AddXmlDocDelayed   : xmlDocFunction: (unit -> string) -> unit   
 
 /// Represents a provided type definition.
 type ProvidedTypeDefinition =
@@ -365,7 +367,7 @@ type ProvidedTypeDefinition =
     member SuppressRelocation : bool  with get,set
 
     /// FSharp.Data addition: this method is used by Debug.fs
-    member MakeParametricType : name:string * args:obj[] -> ProvidedTypeDefinition
+    member ApplyStaticArguments : name:string * args:obj[] -> ProvidedTypeDefinition
 
     /// Add a custom attribute to the provided type definition.
     member AddCustomAttribute : CustomAttributeData -> unit
@@ -419,6 +421,9 @@ type TypeProviderForNamespaces =
 
     /// Invalidate the information provided by the provider
     member Invalidate : unit -> unit
+
+    member GetStaticParametersForMethod : MethodBase -> ParameterInfo[]
+    member ApplyStaticArgumentsForMethod : MethodBase * string * obj[] -> MethodBase
 
 #if FX_NO_LOCAL_FILESYSTEM
 #else
