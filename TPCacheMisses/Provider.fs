@@ -36,9 +36,7 @@ type InstantiationFunctionProvider (config : TypeProviderConfig) as this =
                         x
 
                 incr counter
-                System.Windows.Forms.MessageBox.Show(sprintf "instantiationFunction invoked times: [%i].\nTypename: [%s]" !counter typeName) |> ignore
-                //I use MessageBox.Show because it reveals 3 invocations where is printfn shows only 2
-                //printfn "instantiationFunction invoked times: [%i].\nTypename: [%s]" !counter typeName
+                System.Diagnostics.Debug.Assert(!counter <= 1, sprintf "instantiationFunction invoked times: [%i].\nTypename: [%s]" !counter typeName)
                 
                 let rootType = ProvidedTypeDefinition(assembly, nameSpace, typeName, Some typeof<ExpandoObject>, HideObjectMethods = true)
                 let propertyType = Type.GetType propertyTypeName
