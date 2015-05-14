@@ -1,0 +1,23 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd">
+  <metadata>
+    <id>SystemTimeZonesProvider</id>
+    <version>0.1.0.0-alpha</version>
+    <authors>Dmitry Morozov</authors>
+    <owners>Dmitry Morozov</owners>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <summary>Statically typed enumeration of system time zones.</summary>
+    <description>Statically typed enumeration of system time zones.</description>
+    <copyright>Copyright 2015</copyright>
+    <tags>F# fsharp typeprovider</tags>
+    <frameworkAssemblies>
+      <frameworkAssembly assemblyName="System" />
+    </frameworkAssemblies>
+    <references>
+      <reference file="SystemTimeZonesProvider.dll" />
+    </references>
+  </metadata>
+  <files>
+    <file src="bin\Release\SystemTimeZonesProvider.dll" target="lib\net40" />
+  </files>
+</package>
