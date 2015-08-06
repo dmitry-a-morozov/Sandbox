@@ -2,5 +2,8 @@
 
 open System
 
-SystemTimeZones.``(UTC-08:00) Pacific Time (US & Canada)``
+type MySystemTimeZones = SystemTimeZones
+
+MySystemTimeZones.``(UTC-08:00) Pacific Time (US & Canada)``
+
  

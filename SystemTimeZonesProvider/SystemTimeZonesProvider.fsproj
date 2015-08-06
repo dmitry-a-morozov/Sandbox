@@ -53,13 +53,13 @@
   </Choose>
   <Import Project="$(FSharpTargetsPath)" />
   <ItemGroup>
+    <None Include="Test.fsx" />
+    <None Include=".nuspec" />
     <Compile Include="ProvidedTypes.fsi" />
     <Compile Include="ProvidedTypes.fs" />
     <Compile Include="DebugProvidedTypes.fs" />
     <Compile Include="Provider.fs" />
-    <None Include="Test.fsx" />
     <Content Include="packages.config" />
-    <None Include=".nuspec" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />

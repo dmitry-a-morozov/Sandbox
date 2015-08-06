@@ -1,5 +1,6 @@
 ﻿namespace System
 
+open System.IO
 open System.Reflection
 open Microsoft.FSharp.Core.CompilerServices
 
@@ -12,7 +13,10 @@ type public SystemTimeZonesProvider(config : TypeProviderConfig) as this =
     let nameSpace = this.GetType().Namespace
     let assembly = Assembly.LoadFrom( config.RuntimeAssembly)
 
-    let t = ProvidedTypeDefinition(assembly, nameSpace, "SystemTimeZones", Some typeof<obj>, HideObjectMethods = true)
+    let assembly = Assembly.LoadFrom( config.RuntimeAssembly)
+    let t = ProvidedTypeDefinition(assembly, nameSpace, "SystemTimeZones", Some typeof<obj>, HideObjectMethods = true, IsErased = false)
+    let tempAssembly = ProvidedAssembly( Path.ChangeExtension(Path.GetTempFileName(), ".dll"))
+    do tempAssembly.AddTypes [ t ]
 
     do 
         t.AddMembers [
