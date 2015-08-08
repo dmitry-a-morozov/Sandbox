@@ -25,8 +25,16 @@ open FSharp.Data.Entity
 
 type AdventureWorks = DbContext<"Data Source=.;Initial Catalog=AdventureWorks2014;Integrated Security=True">
 
-let db = new AdventureWorks()
+open Microsoft.Data.Entity
 
-let shift = new AdventureWorks.``HumanResources.Shift``()
-printfn "%A" shift
+let db = 
+    new AdventureWorks(fun optionsBuilder ->
+        System.Diagnostics.Debug.WriteLine "Test"
+        optionsBuilder.UseSqlServer("Data Source=.;Initial Catalog=AdventureWorks2014;Integrated Security=True") |> ignore
+    )
+
+let shift = new AdventureWorks.``HumanResources.Shift``(ShiftID = 12y, Name = "French coffer break")
+printfn "%A" shift.Name
+
+
 

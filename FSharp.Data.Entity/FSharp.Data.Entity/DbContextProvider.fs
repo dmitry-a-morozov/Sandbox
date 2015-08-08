@@ -43,7 +43,7 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
                 ProvidedStaticParameter("ConnectionString", typeof<string>) 
             ],             
             instantiationFunction = (fun typeName args ->   
-                this.CreateRootType(typeName, unbox args.[0])
+                this.CreateDbContextType(typeName, unbox args.[0])
             )        
         )
 
@@ -61,23 +61,50 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
         )
         |> defaultArg <| base.ResolveAssembly( args)
 
-    member internal this.CreateRootType( typeName, connectionString) = 
-        let rootType = ProvidedTypeDefinition(assembly, nameSpace, typeName, baseType = Some typeof<DbContext>, HideObjectMethods = true, IsErased = false)
-        //let rootType = ProvidedTypeDefinition(assembly, nameSpace, typeName, baseType = None, HideObjectMethods = true, IsErased = false)
-        tempAssembly.AddTypes [ rootType ]
+    member internal this.CreateDbContextType( typeName, connectionString) = 
+        let dbContextType = ProvidedTypeDefinition(assembly, nameSpace, typeName, baseType = Some typeof<DbContext>, HideObjectMethods = true, IsErased = false)
+        tempAssembly.AddTypes [ dbContextType ]
 
         do
-            let ctor = ProvidedConstructor([], IsImplicitCtor = true)
+            let parameters = [
+                ProvidedParameter("configuring", typeof<Action<DbContextOptionsBuilder>>, optionalValue = null)
+                ProvidedParameter("modelCreating", typeof<Action<ModelBuilder>>, optionalValue = null)
+            ]
+            let ctor = ProvidedConstructor(parameters, IsImplicitCtor = true)
             let baseCtor = typeof<DbContext>.GetConstructor(BindingFlags.Instance ||| BindingFlags.NonPublic, null, [||], null)
-            ctor.BaseConstructorCall <- fun args -> baseCtor, args
-            rootType.AddMember ctor
+            ctor.BaseConstructorCall <- fun args -> baseCtor, args.[0..0]
+            dbContextType.AddMember ctor
 
-//        rootType.AddMembersDelayed <| fun() ->
-//            let xs = this.GetEntities( connectionString)
-//            tempAssembly.AddTypes xs
-//            xs
+            let handle = typeof<DbContext>.GetMethod("OnConfiguring", BindingFlags.Instance ||| BindingFlags.NonPublic)
+            let p = handle.GetParameters().[0]
+            let impl = ProvidedMethod(handle.Name, [ ProvidedParameter(p.Name, p.ParameterType) ], handle.ReturnType)
+            impl.SetMethodAttrs(handle.Attributes ||| MethodAttributes.Virtual)
+            dbContextType.AddMember impl
+            impl.InvokeCode <- fun args -> 
+                <@@ 
+                    let configuring: Action<DbContextOptionsBuilder> = %Expr.GlobalVar( "configuring")
+                    configuring.Invoke( %%args.[1] )
+                @@>
+            dbContextType.DefineMethodOverride(impl, handle)
 
-        rootType
+        dbContextType.AddMembersDelayed <| fun() ->
+            [
+                let entities = this.GetEntities( connectionString)
+                for e in entities do
+                    yield e :> MemberInfo
+                    let ``type`` = ProvidedTypeBuilder.MakeGenericType( typedefof<_ DbSet>, [ e ])
+                    let name = e.Name + "Table"
+                    let field = ProvidedField("_" + name, ``type``)
+                    yield field :> _
+                    let prop = ProvidedProperty(name, ``type``)
+                    prop.GetterCode <- fun args -> Expr.FieldGet(args.[0], field)
+                    prop.SetterCode <- fun args -> Expr.FieldSet(args.[0], field, args.[1])
+                    yield prop :> _
+
+                tempAssembly.AddTypes entities
+            ]
+
+        dbContextType
 
     member internal this.GetEntities(connectionString: string) = [
         use conn = new SqlConnection(connectionString)
@@ -101,10 +128,8 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
             let tableType = ProvidedTypeDefinition(className = sprintf "%s.%s" schema name , baseType = None, IsErased = false)
 
             do 
-                let ctor = ProvidedConstructor []
-                ctor.BaseConstructorCall <- fun _ -> typeof<obj>.GetConstructor([||]), []
-                //ctor.InvokeCode <- fun _ -> <@@ () @@>
-                ctor.IsImplicitCtor <- true
+                let ctor = ProvidedConstructor([], InvokeCode = fun _ -> <@@ () @@>)
+                ctor.BaseConstructorCall <- fun args -> typeof<obj>.GetConstructor([||]), args
                 tableType.AddMember ctor
 
             do 
@@ -125,6 +150,7 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
                         
                             let property = ProvidedProperty(colName, dataType)
                             property.GetterCode <- fun args -> Expr.FieldGet( args.[0], backingField)
+                            property.SetterCode <- fun args -> Expr.FieldSet( args.[0], backingField, args.[1])
                             yield upcast property
                     ]
 
