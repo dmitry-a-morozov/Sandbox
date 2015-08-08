@@ -67,25 +67,47 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
 
         do
             let parameters = [
-                ProvidedParameter("configuring", typeof<Action<DbContextOptionsBuilder>>, optionalValue = null)
-                ProvidedParameter("modelCreating", typeof<Action<ModelBuilder>>, optionalValue = null)
+                ProvidedParameter("configuring", typeof<DbContextOptionsBuilder -> unit>, optionalValue = null)
+                ProvidedParameter("modelCreating", typeof<ModelBuilder -> unit>, optionalValue = null)
             ]
-            let ctor = ProvidedConstructor(parameters, IsImplicitCtor = true)
-            let baseCtor = typeof<DbContext>.GetConstructor(BindingFlags.Instance ||| BindingFlags.NonPublic, null, [||], null)
-            ctor.BaseConstructorCall <- fun args -> baseCtor, args.[0..0]
-            dbContextType.AddMember ctor
 
-            let handle = typeof<DbContext>.GetMethod("OnConfiguring", BindingFlags.Instance ||| BindingFlags.NonPublic)
-            let p = handle.GetParameters().[0]
-            let impl = ProvidedMethod(handle.Name, [ ProvidedParameter(p.Name, p.ParameterType) ], handle.ReturnType)
-            impl.SetMethodAttrs(handle.Attributes ||| MethodAttributes.Virtual)
-            dbContextType.AddMember impl
-            impl.InvokeCode <- fun args -> 
-                <@@ 
-                    let configuring: Action<DbContextOptionsBuilder> = %Expr.GlobalVar( "configuring")
-                    configuring.Invoke( %%args.[1] )
-                @@>
-            dbContextType.DefineMethodOverride(impl, handle)
+            do 
+                let ctor = ProvidedConstructor(parameters, IsImplicitCtor = true)
+                let baseCtor = typeof<DbContext>.GetConstructor(BindingFlags.Instance ||| BindingFlags.NonPublic, null, [||], null)
+                ctor.BaseConstructorCall <- fun args -> baseCtor, args.[0..0]
+                dbContextType.AddMember ctor
+
+            do 
+                let handle = typeof<DbContext>.GetMethod("OnConfiguring", BindingFlags.Instance ||| BindingFlags.NonPublic)
+                let p = handle.GetParameters().[0]
+                let impl = ProvidedMethod(handle.Name, [ ProvidedParameter(p.Name, p.ParameterType) ], handle.ReturnType)
+                impl.SetMethodAttrs(handle.Attributes ||| MethodAttributes.Virtual)
+                dbContextType.AddMember impl
+                impl.InvokeCode <- fun args -> 
+                    <@@ 
+                        let configuring = %Expr.GlobalVar( parameters.[0].Name)
+                        if box configuring <> null
+                        then 
+                            let optionsBuilder: DbContextOptionsBuilder = %%args.[1]
+                            configuring optionsBuilder
+                    @@>
+                dbContextType.DefineMethodOverride(impl, handle)
+
+            do 
+                let handle = typeof<DbContext>.GetMethod("OnModelCreating", BindingFlags.Instance ||| BindingFlags.NonPublic)
+                let p = handle.GetParameters().[0]
+                let impl = ProvidedMethod(handle.Name, [ ProvidedParameter(p.Name, p.ParameterType) ], handle.ReturnType)
+                impl.SetMethodAttrs(handle.Attributes ||| MethodAttributes.Virtual)
+                dbContextType.AddMember impl
+                impl.InvokeCode <- fun args -> 
+                    <@@ 
+                        let modelCreating = %Expr.GlobalVar( parameters.[1].Name)
+                        if box modelCreating <> null
+                        then 
+                            let modelBuilder: ModelBuilder = %%args.[1]
+                            modelCreating modelBuilder
+                    @@>
+                dbContextType.DefineMethodOverride(impl, handle)
 
         dbContextType.AddMembersDelayed <| fun() ->
             [
@@ -119,7 +141,9 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
                         | [| "Microsoft.SqlServer.Types.SqlHierarchyId"; _ |] -> "hierarchyid", typeName
                         | [| "Microsoft.SqlServer.Types.SqlGeometry"; _ |] -> "geometry", typeName
                         | [| "Microsoft.SqlServer.Types.SqlGeography"; _ |] -> "geography", typeName
-                        | _ -> typeName, string x.["DataType"]
+                        | _ -> 
+                            let datatype = if typeName = "tinyint" then typeof<byte>.FullName else x.Field( "DataType")
+                            typeName, datatype
             ] 
 
         for row in conn.GetSchema("Tables", restrictionValues = [| null; null; null; "BASE TABLE" |]).Rows do   

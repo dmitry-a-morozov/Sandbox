@@ -53,7 +53,9 @@
   <ItemGroup>
     <Content Include="packages.config" />
     <Compile Include="Basic.fs" />
+    <None Include="EFDependecies.fsx" />
     <None Include="Test.fsx" />
+    <Content Include="app.config" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="EntityFramework.Core">
