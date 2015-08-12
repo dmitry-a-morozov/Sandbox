@@ -60,7 +60,7 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
                     | [| "Microsoft.SqlServer.Types.SqlGeography"; _ |] -> "geography", typeName
                     | [| "tinyint" |] -> typeName, typeof<byte>.FullName
                     | _ -> typeName, string x.["DataType"]
-                typeMappings.Add(sqlEngineTypeName, Type.GetType( clrTypeName, throwOnError = true))
+                typeMappings.Add(sqlEngineTypeName, clrTypeName)
 
     override __.ResolveAssembly args =
         let missing = AssemblyName(args.Name)
@@ -158,7 +158,10 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
                         let schema, tableName = 
                             let xs = twoPartTableName.Split([|'.'|], 2) in 
                             xs.[0], xs.[1]
-                        modelBuilder.Entity(entity.FullName).ToTable(tableName, schema) |> ignore
+                        modelBuilder
+                            .Entity(entity.FullName)
+                            .ToTable(tableName, schema)
+                            |> ignore
 
                     let modelCreating = %%Expr.FieldGet(args.Head, field)
                     if box modelCreating <> null
@@ -213,12 +216,14 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
                         use cursor = cmd.ExecuteReader()
                         while cursor.Read() do
                             let colName = cursor ? COLUMN_NAME
-                            let dataType = typeMappings.[cursor ? DATA_TYPE]
+                            let clrType = 
+                                let clrTypeName = typeMappings.[cursor ? DATA_TYPE]
+                                Type.GetType( clrTypeName, throwOnError = true)
                             let isNullable = cursor ? IS_NULLABLE = "YES"
                             let clrType = 
-                                if isNullable && dataType.IsValueType
-                                then ProvidedTypeBuilder.MakeGenericType(typedefof<_ Nullable>, [ dataType ])
-                                else dataType
+                                if isNullable && clrType.IsValueType
+                                then ProvidedTypeBuilder.MakeGenericType(typedefof<_ Nullable>, [ clrType ])
+                                else clrType
                             
                             let backingField = ProvidedField(colName, clrType)
                             yield backingField :> MemberInfo
