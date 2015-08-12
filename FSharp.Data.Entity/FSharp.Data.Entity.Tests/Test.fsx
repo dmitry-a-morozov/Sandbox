@@ -9,15 +9,12 @@ type AdventureWorks = DbContext<"Data Source=.;Initial Catalog=AdventureWorks201
 
 open Microsoft.Data.Entity
 
-let db = 
-    new AdventureWorks( 
-        configuring = (fun optionsBuilder -> 
-            optionsBuilder.UseSqlServer("Data Source=.;Initial Catalog=AdventureWorks2014;Integrated Security=True") |> ignore
-        ), 
-        modelCreating = (fun modelBuilder -> 
-            modelBuilder.Entity<AdventureWorks.``HumanResources.Shift``>().ToTable("Shift", "HumanResources") |> ignore
-        )
-    )
+let db = new AdventureWorks()
+db.OnConfiguring <- fun optionsBuilder -> 
+    optionsBuilder.UseSqlServer("Data Source=.;Initial Catalog=AdventureWorks2014;Integrated Security=True") |> ignore
+
+db.OnModelCreating <- fun modelBuilder -> 
+    modelBuilder.Entity<AdventureWorks.``HumanResources.Shift``>().ToTable("Shift", "HumanResources") |> ignore
 
 query {
     for x in db.``HumanResources.ShiftTable`` do

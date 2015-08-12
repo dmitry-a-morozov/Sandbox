@@ -73,6 +73,10 @@
       <HintPath>..\packages\EntityFramework.SqlServer.7.0.0-beta6\lib\net45\EntityFramework.SqlServer.dll</HintPath>
       <Private>True</Private>
     </Reference>
+    <Reference Include="Inflector">
+      <HintPath>..\packages\Inflector.1.0.0.0\lib\net45\Inflector.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="Microsoft.Framework.Caching.Abstractions">
       <HintPath>..\packages\Microsoft.Framework.Caching.Abstractions.1.0.0-beta6\lib\net45\Microsoft.Framework.Caching.Abstractions.dll</HintPath>
