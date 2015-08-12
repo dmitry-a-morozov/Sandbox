@@ -47,9 +47,9 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
     //helpers
     let (?) (row: SqlDataReader) (name: string) = unbox row.[name]
 
-    let typeMappings = Dictionary()
+    static let typeMappings = Dictionary()
 
-    let loadTypeMappings(conn: SqlConnection) = 
+    static let loadTypeMappings(conn: SqlConnection) = 
         lock typeMappings <| fun () ->
             for x in conn.GetSchema("DataTypes").Rows do
                 let typeName = string x.["TypeName"]
@@ -153,12 +153,12 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
                 <@@ 
                     let modelBuilder: ModelBuilder = %%args.[1]
                     let this: DbContext = %%Expr.Coerce(args.[0], typeof<DbContext>)
-//                    for entity in this.GetType().GetNestedTypes() do
-//                        let schema, tableName = 
-//                            let twoPartName = entity.Name.Split([|'.'|], 2)
-//                            printfn "Entity for type: FullName - %s, Name - %s" entity.FullName entity.Name
-//                            twoPartName.[0], twoPartName.[1]
-//                        modelBuilder.Entity(entity.FullName).ToTable(tableName, schema) |> ignore
+                    for entity in this.GetType().GetNestedTypes() do
+                        let twoPartTableName = entity.FullName.Split('+') |> Array.last
+                        let schema, tableName = 
+                            let xs = twoPartTableName.Split([|'.'|], 2) in 
+                            xs.[0], xs.[1]
+                        modelBuilder.Entity(entity.FullName).ToTable(tableName, schema) |> ignore
 
                     let modelCreating = %%Expr.FieldGet(args.Head, field)
                     if box modelCreating <> null
@@ -179,7 +179,7 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
         use cmd = new SqlCommand(query, conn)
         use cursor = cmd.ExecuteReader()
         while cursor.Read() do
-            yield cursor.GetString(0), cursor.GetString(1)
+            yield cursor ? TABLE_SCHEMA, cursor ? TABLE_NAME
     ]
 
     member internal this.GetEntities(tables, connectionString) = [
