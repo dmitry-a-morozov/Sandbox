@@ -22,14 +22,13 @@ db.OnModelCreating <- fun modelBuilder ->
             fun entity -> entity.ToTable("Employee", "HumanResources")|> ignore
         )
     |> ignore
-    //modelBuilder.Entity<AdventureWorks.``HumanResources.Shift``>().ToTable("Shift", "HumanResources") |> ignore
 
 [<Fact>]
 let getTableContent() = 
     let expected = [|
-        (1,"Day", TimeSpan.Parse("07:00:00.0000000"),TimeSpan.Parse("15:00:00.0000000"),DateTime.Parse("Apr 30 2008 12:00AM"))
-        (2,"Evening", TimeSpan.Parse("15:00:00.0000000"),TimeSpan.Parse("23:00:00.0000000"),DateTime.Parse("Apr 30 2008 12:00AM"))
-        (3,"Night", TimeSpan.Parse("23:00:00.0000000"),TimeSpan.Parse("07:00:00.0000000"),DateTime.Parse("Apr 30 2008 12:00AM"))
+        (1,"Day", TimeSpan.Parse("07:00:00"), TimeSpan.Parse("15:00:00"), DateTime.Parse("2008-04-30"))
+        (2,"Evening", TimeSpan.Parse("15:00:00"), TimeSpan.Parse("23:00:00"), DateTime.Parse("2008-04-30"))
+        (3,"Night", TimeSpan.Parse("23:00:00"), TimeSpan.Parse("07:00:00"), DateTime.Parse("2008-04-30"))
     |]
 
     let actual = [| for x in db.``HumanResources.Shifts`` -> int x.ShiftID, x.Name, x.StartTime, x.EndTime, x.ModifiedDate |]

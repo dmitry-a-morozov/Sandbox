@@ -5,6 +5,7 @@ open System.Reflection
 open System.IO
 open System.Data
 open System.Data.SqlClient
+open System.Collections.Generic
 
 open Microsoft.Data.Entity
 
@@ -44,10 +45,23 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
         this.AddNamespace( nameSpace, [ providerType ])
 
     //helpers
-    let (?) (row: DataRow) (name: string) = row.Field name
+    let (?) (row: SqlDataReader) (name: string) = unbox row.[name]
 
-    let camelCase (s: string) = sprintf "%c%s" (Char.ToLower s.[0]) (s.Substring(1))
-    
+    let typeMappings = Dictionary()
+
+    let loadTypeMappings(conn: SqlConnection) = 
+        lock typeMappings <| fun () ->
+            for x in conn.GetSchema("DataTypes").Rows do
+                let typeName = string x.["TypeName"]
+                let sqlEngineTypeName, clrTypeName = 
+                    match typeName.Split([|','|], 2) with
+                    | [| "Microsoft.SqlServer.Types.SqlHierarchyId"; _ |] ->  "hierarchyid", typeName
+                    | [| "Microsoft.SqlServer.Types.SqlGeometry"; _ |] -> "geometry", typeName
+                    | [| "Microsoft.SqlServer.Types.SqlGeography"; _ |] -> "geography", typeName
+                    | [| "tinyint" |] -> typeName, typeof<byte>.FullName
+                    | _ -> typeName, string x.["DataType"]
+                typeMappings.Add(sqlEngineTypeName, Type.GetType( clrTypeName, throwOnError = true))
+
     override __.ResolveAssembly args =
         let missing = AssemblyName(args.Name)
 
@@ -79,6 +93,25 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
                         ctor.BaseConstructorCall <- fun args -> baseCtor, args
                         yield ctor
                 ]
+
+        let tables = this.GetTables(connectionString)
+
+        dbContextType.AddMembersDelayed <| fun() ->
+            [
+                let entities = this.GetEntities(tables, connectionString)
+                for e in entities do
+                    yield e :> MemberInfo
+                    let ``type`` = ProvidedTypeBuilder.MakeGenericType( typedefof<_ DbSet>, [ e ])
+                    let name = e.Name.Pluralize()
+                    let field = ProvidedField(name, ``type``)
+                    yield field :> _
+                    let prop = ProvidedProperty(name, ``type``)
+                    prop.GetterCode <- fun args -> Expr.FieldGet(args.[0], field)
+                    prop.SetterCode <- fun args -> Expr.FieldSet(args.[0], field, args.[1])
+                    yield prop :> _
+
+                tempAssembly.AddTypes entities
+            ]
 
         do 
             let name = "OnConfiguring"
@@ -118,54 +151,46 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
             dbContextType.AddMember impl
             impl.InvokeCode <- fun args -> 
                 <@@ 
+                    let modelBuilder: ModelBuilder = %%args.[1]
+                    let this: DbContext = %%Expr.Coerce(args.[0], typeof<DbContext>)
+//                    for entity in this.GetType().GetNestedTypes() do
+//                        let schema, tableName = 
+//                            let twoPartName = entity.Name.Split([|'.'|], 2)
+//                            printfn "Entity for type: FullName - %s, Name - %s" entity.FullName entity.Name
+//                            twoPartName.[0], twoPartName.[1]
+//                        modelBuilder.Entity(entity.FullName).ToTable(tableName, schema) |> ignore
+
                     let modelCreating = %%Expr.FieldGet(args.Head, field)
                     if box modelCreating <> null
-                    then 
-                        let modelBuilder: ModelBuilder = %%args.[1]
-                        modelCreating modelBuilder
+                    then modelCreating modelBuilder
                 @@>
             dbContextType.DefineMethodOverride(impl, vTableHandle)
 
-        dbContextType.AddMembersDelayed <| fun() ->
-            [
-                let entities = this.GetEntities( connectionString)
-                for e in entities do
-                    yield e :> MemberInfo
-                    let ``type`` = ProvidedTypeBuilder.MakeGenericType( typedefof<_ DbSet>, [ e ])
-                    let name = e.Name.Pluralize()
-                    let field = ProvidedField(name, ``type``)
-                    yield field :> _
-                    let prop = ProvidedProperty(name, ``type``)
-                    prop.GetterCode <- fun args -> Expr.FieldGet(args.[0], field)
-                    prop.SetterCode <- fun args -> Expr.FieldSet(args.[0], field, args.[1])
-                    yield prop :> _
-
-                tempAssembly.AddTypes entities
-            ]
-
         dbContextType
 
-    member internal this.GetEntities(connectionString: string) = [
+    member internal this.GetTables(connectionString) = [
+        use conn = new SqlConnection(connectionString)
+        conn.Open()
+        let query = "
+            SELECT TABLE_SCHEMA, TABLE_NAME
+            FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_TYPE = 'BASE TABLE'
+        "
+        use cmd = new SqlCommand(query, conn)
+        use cursor = cmd.ExecuteReader()
+        while cursor.Read() do
+            yield cursor.GetString(0), cursor.GetString(1)
+    ]
+
+    member internal this.GetEntities(tables, connectionString) = [
         use conn = new SqlConnection(connectionString)
         conn.Open()
 
-        let types = 
-            dict [
-                for x in conn.GetSchema("DataTypes").Rows do
-                    let typeName = string x.["TypeName"]
-                    yield
-                        match typeName.Split([|','|], 2) with
-                        | [| "Microsoft.SqlServer.Types.SqlHierarchyId"; _ |] -> "hierarchyid", typeName
-                        | [| "Microsoft.SqlServer.Types.SqlGeometry"; _ |] -> "geometry", typeName
-                        | [| "Microsoft.SqlServer.Types.SqlGeography"; _ |] -> "geography", typeName
-                        | _ -> 
-                            let datatype = if typeName = "tinyint" then typeof<byte>.FullName else x.Field( "DataType")
-                            typeName, datatype
-            ] 
+        if typeMappings.Count = 0
+        then loadTypeMappings conn
 
-        for row in conn.GetSchema("Tables", restrictionValues = [| null; null; null; "BASE TABLE" |]).Rows do   
+        for schema, name in tables do   
 
-            let schema, name = row ? table_schema, row ? table_name
             let tableType = ProvidedTypeDefinition(className = sprintf "%s.%s" schema name , baseType = None, IsErased = false)
 
             do 
@@ -178,15 +203,20 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
                     [
                         use conn = new SqlConnection(connectionString)
                         conn.Open()
-                        let columns = conn.GetSchema("Columns", restrictionValues = [| null; schema; name; null |]).Rows
-                        for c in columns do
-                            let colName = c ? column_name
-                            let dataType = 
-                                let typeName = c ? data_type
-                                Type.GetType(types.[typeName], throwOnError = true)
-                            let isNullable = c ? is_nullable
+                        let query = 
+                            sprintf "
+                                SELECT COLUMN_NAME, COLUMN_DEFAULT, IS_NULLABLE, DATA_TYPE
+                                FROM INFORMATION_SCHEMA.COLUMNS
+                                WHERE TABLE_SCHEMA = '%s' AND TABLE_NAME = '%s'
+                            " schema name
+                        use cmd = new SqlCommand(query, conn)
+                        use cursor = cmd.ExecuteReader()
+                        while cursor.Read() do
+                            let colName = cursor ? COLUMN_NAME
+                            let dataType = typeMappings.[cursor ? DATA_TYPE]
+                            let isNullable = cursor ? IS_NULLABLE = "YES"
                             let clrType = 
-                                if c ? is_nullable = "YES" && dataType.IsValueType
+                                if isNullable && dataType.IsValueType
                                 then ProvidedTypeBuilder.MakeGenericType(typedefof<_ Nullable>, [ dataType ])
                                 else dataType
                             
