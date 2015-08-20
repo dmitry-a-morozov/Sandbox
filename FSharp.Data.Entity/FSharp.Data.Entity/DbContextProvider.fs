@@ -32,6 +32,13 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
     do 
         tempAssembly.AddTypes [ providerType ]
 
+    let getAutoProperty(name: string, clrType) = 
+        let backingField = ProvidedField(name.Camelize(), clrType)
+        let property = ProvidedProperty(name, clrType)
+        property.GetterCode <- fun args -> Expr.FieldGet( args.[0], backingField)
+        property.SetterCode <- fun args -> Expr.FieldSet( args.[0], backingField, args.[1])
+        [ backingField :> MemberInfo; property :> _ ]
+
     do 
         providerType.DefineStaticParameters(
             parameters = [ 
@@ -43,24 +50,6 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
         )
 
         this.AddNamespace( nameSpace, [ providerType ])
-
-    //helpers
-    let (?) (row: SqlDataReader) (name: string) = unbox row.[name]
-
-    static let typeMappings = Dictionary()
-
-    static let loadTypeMappings(conn: SqlConnection) = 
-        lock typeMappings <| fun () ->
-            for x in conn.GetSchema("DataTypes").Rows do
-                let typeName = string x.["TypeName"]
-                let sqlEngineTypeName, clrTypeName = 
-                    match typeName.Split([|','|], 2) with
-                    | [| "Microsoft.SqlServer.Types.SqlHierarchyId"; _ |] ->  "hierarchyid", typeName
-                    | [| "Microsoft.SqlServer.Types.SqlGeometry"; _ |] -> "geometry", typeName
-                    | [| "Microsoft.SqlServer.Types.SqlGeography"; _ |] -> "geography", typeName
-                    | [| "tinyint" |] -> typeName, typeof<byte>.FullName
-                    | _ -> typeName, string x.["DataType"]
-                typeMappings.Add(sqlEngineTypeName, clrTypeName)
 
     override __.ResolveAssembly args =
         let missing = AssemblyName(args.Name)
@@ -94,24 +83,9 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
                         yield ctor
                 ]
 
-        let tables = this.GetTables(connectionString)
+        let sqlServerSchema = DesignTime.Schemas.getSqlServerSchema connectionString
 
-        dbContextType.AddMembersDelayed <| fun() ->
-            [
-                let entities = this.GetEntities(tables, connectionString)
-                for e in entities do
-                    yield e :> MemberInfo
-                    let ``type`` = ProvidedTypeBuilder.MakeGenericType( typedefof<_ DbSet>, [ e ])
-                    let name = e.Name.Pluralize()
-                    let field = ProvidedField(name, ``type``)
-                    yield field :> _
-                    let prop = ProvidedProperty(name, ``type``)
-                    prop.GetterCode <- fun args -> Expr.FieldGet(args.[0], field)
-                    prop.SetterCode <- fun args -> Expr.FieldSet(args.[0], field, args.[1])
-                    yield prop :> _
-
-                tempAssembly.AddTypes entities
-            ]
+        this.AddEntityTypesAndDataSets(dbContextType, sqlServerSchema)
 
         do 
             let name = "OnConfiguring"
@@ -158,10 +132,13 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
                         let schema, tableName = 
                             let xs = twoPartTableName.Split([|'.'|], 2) in 
                             xs.[0], xs.[1]
-                        modelBuilder
-                            .Entity(entity.FullName)
-                            .ToTable(tableName, schema)
-                            |> ignore
+
+                        RelationalEntityTypeBuilderExtensions.ToTable(
+                            modelBuilder.Entity(entity),
+                            tableName, 
+                            schema
+                        )
+                        |> ignore
 
                     let modelCreating = %%Expr.FieldGet(args.Head, field)
                     if box modelCreating <> null
@@ -171,71 +148,67 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
 
         dbContextType
 
-    member internal this.GetTables(connectionString) = [
-        use conn = new SqlConnection(connectionString)
-        conn.Open()
-        let query = "
-            SELECT TABLE_SCHEMA, TABLE_NAME
-            FROM INFORMATION_SCHEMA.TABLES
-            WHERE TABLE_TYPE = 'BASE TABLE'
-        "
-        use cmd = new SqlCommand(query, conn)
-        use cursor = cmd.ExecuteReader()
-        while cursor.Read() do
-            yield cursor ? TABLE_SCHEMA, cursor ? TABLE_NAME
-    ]
+    member internal this.AddEntityTypesAndDataSets(dbConTextType: ProvidedTypeDefinition, schema: DesignTime.Schemas.IInformationSchema) = 
+        dbConTextType.AddMembersDelayed <| fun () ->
+            let entityTypes = [
 
-    member internal this.GetEntities(tables, connectionString) = [
-        use conn = new SqlConnection(connectionString)
-        conn.Open()
+                for tableName in schema.GetTables() do   
 
-        if typeMappings.Count = 0
-        then loadTypeMappings conn
+                    let tableType = ProvidedTypeDefinition(tableName , baseType = None, IsErased = false)
 
-        for schema, name in tables do   
+                    do 
+                        let ctor = ProvidedConstructor([], InvokeCode = fun _ -> <@@ () @@>)
+                        ctor.BaseConstructorCall <- fun args -> typeof<obj>.GetConstructor([||]), args
+                        tableType.AddMember ctor
 
-            let tableType = ProvidedTypeDefinition(className = sprintf "%s.%s" schema name , baseType = None, IsErased = false)
+                    do 
+                        tableType.AddMembersDelayed <| fun() -> 
+                            [
+                                for c in schema.GetColumns(tableName) do
+                                    let clrType = 
+                                        if c.IsNullable && c.Type.IsValueType
+                                        then ProvidedTypeBuilder.MakeGenericType(typedefof<_ Nullable>, [ c.Type ])
+                                        else c.Type
 
-            do 
-                let ctor = ProvidedConstructor([], InvokeCode = fun _ -> <@@ () @@>)
-                ctor.BaseConstructorCall <- fun args -> typeof<obj>.GetConstructor([||]), args
-                tableType.AddMember ctor
+                                    yield! getAutoProperty(c.Name, clrType)
+        
+//                                for fk in schema.GetForeignKeys(tableName) do
+//                                    let parent: ProvidedTypeDefinition = downcast dbConTextType.GetNestedType( tableName) 
+//                                    yield! getAutoProperty(parent.Name, parent)
+//                                    
+//                                    parent.AddMembersDelayed <| fun () -> 
+//                                        let collectionType = ProvidedTypeBuilder.MakeGenericType(typedefof<_ List>, clr
+//                                    let backingField = ProvidedField(fk.Name.Camelize(), parent)
+//                                    let prop = ProvidedProperty(fk.Name, parent)
+//                                    yield upcast backingField
+//                                    yield upcast property
+//                                    parent.AddMemberDelayed <| fun() -> 
 
-            do 
-                tableType.AddMembersDelayed <| fun() -> 
-                    [
-                        use conn = new SqlConnection(connectionString)
-                        conn.Open()
-                        let query = 
-                            sprintf "
-                                SELECT COLUMN_NAME, COLUMN_DEFAULT, IS_NULLABLE, DATA_TYPE
-                                FROM INFORMATION_SCHEMA.COLUMNS
-                                WHERE TABLE_SCHEMA = '%s' AND TABLE_NAME = '%s'
-                            " schema name
-                        use cmd = new SqlCommand(query, conn)
-                        use cursor = cmd.ExecuteReader()
-                        while cursor.Read() do
-                            let colName = cursor ? COLUMN_NAME
-                            let clrType = 
-                                let clrTypeName = typeMappings.[cursor ? DATA_TYPE]
-                                Type.GetType( clrTypeName, throwOnError = true)
-                            let isNullable = cursor ? IS_NULLABLE = "YES"
-                            let clrType = 
-                                if isNullable && clrType.IsValueType
-                                then ProvidedTypeBuilder.MakeGenericType(typedefof<_ Nullable>, [ clrType ])
-                                else clrType
-                            
-                            let backingField = ProvidedField(colName, clrType)
-                            yield backingField :> MemberInfo
-                        
-                            let property = ProvidedProperty(colName, clrType)
-                            property.GetterCode <- fun args -> Expr.FieldGet( args.[0], backingField)
-                            property.SetterCode <- fun args -> Expr.FieldSet( args.[0], backingField, args.[1])
-                            yield upcast property
-                    ]
+                            ]
 
-            yield tableType
-    ]
+                    yield tableType
+            ]
+            
+            tempAssembly.AddTypes entityTypes
+
+            let props = [
+                for e in entityTypes do
+                    let field, prop = this.GetDbSetPropAndField(e)
+                    yield field :> MemberInfo
+                    yield prop :> _
+            ]
+
+            [ for x in entityTypes -> x :> MemberInfo ] @ props
+
+    member internal this.GetDbSetPropAndField(entityType: ProvidedTypeDefinition) = 
+        let ``type`` = ProvidedTypeBuilder.MakeGenericType( typedefof<_ DbSet>, [ entityType ])
+        let name = entityType.Name.Pluralize()
+        let field = ProvidedField(name, ``type``)
+        let prop = ProvidedProperty(name, ``type``)
+        prop.GetterCode <- fun args -> Expr.FieldGet(args.[0], field)
+        prop.SetterCode <- fun args -> Expr.FieldSet(args.[0], field, args.[1])
+        field, prop
+
         
 
 [<assembly:TypeProviderAssembly()>]
