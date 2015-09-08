@@ -7,6 +7,8 @@ open System.Data
 open System.Data.SqlClient
 open System.Collections.Generic
 
+open System.ComponentModel.DataAnnotations
+open System.ComponentModel.DataAnnotations.Schema
 open Microsoft.Data.Entity
 
 open Microsoft.FSharp.Core.CompilerServices
@@ -15,6 +17,8 @@ open Microsoft.FSharp.Quotations
 open ProviderImplementation.ProvidedTypes
 
 open Inflector
+
+open FSharp.Data.Entity.DesignTime
 
 [<TypeProvider>]
 type public DbContextProvider(config: TypeProviderConfig) as this = 
@@ -37,7 +41,7 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
         let property = ProvidedProperty(name, clrType)
         property.GetterCode <- fun args -> Expr.FieldGet( args.[0], backingField)
         property.SetterCode <- fun args -> Expr.FieldSet( args.[0], backingField, args.[1])
-        [ backingField :> MemberInfo; property :> _ ]
+        [ property :> MemberInfo; backingField :> _ ]
 
     do 
         providerType.DefineStaticParameters(
@@ -83,7 +87,7 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
                         yield ctor
                 ]
 
-        let sqlServerSchema = DesignTime.Schemas.getSqlServerSchema connectionString
+        let sqlServerSchema = DesignTime.SqlServer.getSqlServerSchema connectionString
 
         this.AddEntityTypesAndDataSets(dbContextType, sqlServerSchema)
 
@@ -124,37 +128,32 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
             impl.SetMethodAttrs(vTableHandle.Attributes ||| MethodAttributes.Virtual)
             dbContextType.AddMember impl
             impl.InvokeCode <- fun args -> 
+                let defaultConfiguration = sqlServerSchema.ModelConfiguration
                 <@@ 
                     let modelBuilder: ModelBuilder = %%args.[1]
-                    let this: DbContext = %%Expr.Coerce(args.[0], typeof<DbContext>)
-                    for entity in this.GetType().GetNestedTypes() do
-                        let twoPartTableName = entity.FullName.Split('+') |> Array.last
-                        let schema, tableName = 
-                            let xs = twoPartTableName.Split([|'.'|], 2) in 
-                            xs.[0], xs.[1]
-
-                        RelationalEntityTypeBuilderExtensions.ToTable(
-                            modelBuilder.Entity(entity),
-                            tableName, 
-                            schema
-                        )
-                        |> ignore
-
-                    let modelCreating = %%Expr.FieldGet(args.Head, field)
+                    let dbContext: DbContext = %%Expr.Coerce(args.[0], typeof<DbContext>)
+                    let entityTypeNames = dbContext.GetType().GetNestedTypes() |> Array.map (fun x -> x.FullName)
+                    %defaultConfiguration <| (entityTypeNames, modelBuilder)
+                    let modelCreating = %%Expr.FieldGet(args.[0], field)
                     if box modelCreating <> null
-                    then modelCreating modelBuilder
+                    then 
+                        modelCreating modelBuilder
                 @@>
             dbContextType.DefineMethodOverride(impl, vTableHandle)
 
         dbContextType
 
-    member internal this.AddEntityTypesAndDataSets(dbConTextType: ProvidedTypeDefinition, schema: DesignTime.Schemas.IInformationSchema) = 
+    member internal this.AddEntityTypesAndDataSets(dbConTextType: ProvidedTypeDefinition, schema: IInformationSchema) = 
         dbConTextType.AddMembersDelayed <| fun () ->
             let entityTypes = [
 
                 for tableName in schema.GetTables() do   
 
                     let tableType = ProvidedTypeDefinition(tableName , baseType = None, IsErased = false)
+//                    let schemaName, table = DesignTime.SqlServer.(|TwoPartName|) tableName
+//                    
+//                    do
+//                        addCustomAttribute<TableAttribute, _> (tableType, [ table ], [ "Schema", box schemaName ])
 
                     do 
                         let ctor = ProvidedConstructor([], InvokeCode = fun _ -> <@@ () @@>)
@@ -164,26 +163,20 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
                     do 
                         tableType.AddMembersDelayed <| fun() -> 
                             [
-                                for c in schema.GetColumns(tableName) do
-                                    let clrType = 
-                                        if c.IsNullable && c.Type.IsValueType
-                                        then ProvidedTypeBuilder.MakeGenericType(typedefof<_ Nullable>, [ c.Type ])
-                                        else c.Type
+                                for name, clrType in schema.GetColumns(tableName) do
 
-                                    yield! getAutoProperty(c.Name, clrType)
-        
-//                                for fk in schema.GetForeignKeys(tableName) do
-//                                    let parent: ProvidedTypeDefinition = downcast dbConTextType.GetNestedType( tableName) 
-//                                    yield! getAutoProperty(parent.Name, parent)
+                                    yield! getAutoProperty(name, clrType)
+
+//                                for fk in schema.GetForeignKeys(tableName) do   
+//                                    let parentEntityName = sprintf "%s.%s" fk.ParentTableSchema fk.ParentTable
+//                                    let parent: ProvidedTypeDefinition = downcast dbConTextType.GetNestedType( parentEntityName) 
+//
+//                                    yield! getAutoProperty(fk.ParentTable.Pluralize(), parent)
 //                                    
 //                                    parent.AddMembersDelayed <| fun () -> 
-//                                        let collectionType = ProvidedTypeBuilder.MakeGenericType(typedefof<_ List>, clr
-//                                    let backingField = ProvidedField(fk.Name.Camelize(), parent)
-//                                    let prop = ProvidedProperty(fk.Name, parent)
-//                                    yield upcast backingField
-//                                    yield upcast property
-//                                    parent.AddMemberDelayed <| fun() -> 
-
+//                                        let collectionType = ProvidedTypeBuilder.MakeGenericType(typedefof<_ List>, [ tableType ])
+//                                        let table = tableName.Split('.').[1]
+//                                        getAutoProperty(table.Pluralize(), collectionType)
                             ]
 
                     yield tableType

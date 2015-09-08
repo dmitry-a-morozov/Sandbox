@@ -11,17 +11,18 @@ open Microsoft.Data.Entity
 
 let db = new AdventureWorks()
 
+
 [<Fact>]
 let getTableContent() = 
     let expected = [|
-        (1uy,"Day", TimeSpan.Parse("07:00:00"), TimeSpan.Parse("15:00:00"), DateTime.Parse("2008-04-30"))
+        (1uy,"Day",  TimeSpan.Parse("07:00:00"), TimeSpan.Parse("15:00:00"), DateTime.Parse("2008-04-30"))
         (2uy,"Evening", TimeSpan.Parse("15:00:00"), TimeSpan.Parse("23:00:00"), DateTime.Parse("2008-04-30"))
         (3uy,"Night", TimeSpan.Parse("23:00:00"), TimeSpan.Parse("07:00:00"), DateTime.Parse("2008-04-30"))
     |]
 
     let actual = [| for x in db.``HumanResources.Shifts`` -> x.ShiftID, x.Name, x.StartTime, x.EndTime, x.ModifiedDate |]
 
-    Assert.Equal<_[]>(expected, actual)
+    Assert.Equal<_ []>(expected, actual)
 
 [<Fact>]
 let linqFilterOnServer() = 
@@ -92,6 +93,32 @@ let nullableColumn() =
 
     Assert.Equal<_ list>(expected, upperManagement)
 
+[<Fact>]
+let innerJoin() = 
+    let actual =
+        query {
+            for e in db.``HumanResources.Employees`` do
+            join p in db.``Person.People`` on (e.BusinessEntityID = p.BusinessEntityID)
+//            where (e.OrganizationLevel = Nullable(1s))
+//            sortBy p.LastName
+//            select (e.HireDate, sprintf "%s %s" p.FirstName p.LastName)
+            select(e, p)
+        }
+        |> Seq.filter(fun (e, p ) -> e.OrganizationLevel ?= 1s)
+        |> Seq.sortBy(fun (e, p ) -> p.LastName)
+        |> Seq.map(fun (e, p ) -> e.HireDate, sprintf "%s %s" p.FirstName p.LastName)
+        |> Seq.toArray
 
+
+    let expected = [|
+        DateTime( 2007, 12, 20),  "David Bradley"
+        DateTime( 2008, 01, 31),  "Terri Duffy"
+        DateTime( 2009, 02, 03),  "James Hamilton"
+        DateTime( 2009, 01, 31),  "Laura Norman"
+        DateTime( 2008, 12, 11),  "Jean Trenary"
+        DateTime( 2011, 02, 15), "Brian Welcker"
+    |]
+    
+    Assert.Equal<_[]>(expected, actual)
 
         

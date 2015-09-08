@@ -57,7 +57,9 @@
     <Compile Include="ProvidedTypes.fsi" />
     <Compile Include="ProvidedTypes.fs" />
     <Compile Include="DebugProvidedTypes.fs" />
-    <Compile Include="Schemas.fs" />
+    <Compile Include="ProvidedTypes.Extensions.fs" />
+    <Compile Include="Schema.fs" />
+    <Compile Include="SqlServer.fs" />
     <Compile Include="DbContextProvider.fs" />
     <Content Include="packages.config" />
   </ItemGroup>
