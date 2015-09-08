@@ -99,24 +99,19 @@ let innerJoin() =
         query {
             for e in db.``HumanResources.Employees`` do
             join p in db.``Person.People`` on (e.BusinessEntityID = p.BusinessEntityID)
-//            where (e.OrganizationLevel = Nullable(1s))
-//            sortBy p.LastName
-//            select (e.HireDate, sprintf "%s %s" p.FirstName p.LastName)
-            select(e, p)
+            where (e.OrganizationLevel = Nullable(1s))
+            sortBy p.LastName
+            select(e.HireDate, p.FirstName,  p.LastName)
         }
-        |> Seq.filter(fun (e, p ) -> e.OrganizationLevel ?= 1s)
-        |> Seq.sortBy(fun (e, p ) -> p.LastName)
-        |> Seq.map(fun (e, p ) -> e.HireDate, sprintf "%s %s" p.FirstName p.LastName)
         |> Seq.toArray
 
-
     let expected = [|
-        DateTime( 2007, 12, 20),  "David Bradley"
-        DateTime( 2008, 01, 31),  "Terri Duffy"
-        DateTime( 2009, 02, 03),  "James Hamilton"
-        DateTime( 2009, 01, 31),  "Laura Norman"
-        DateTime( 2008, 12, 11),  "Jean Trenary"
-        DateTime( 2011, 02, 15), "Brian Welcker"
+        DateTime( 2007, 12, 20),  "David", "Bradley"
+        DateTime( 2008, 01, 31),  "Terri", "Duffy"
+        DateTime( 2009, 02, 03),  "James", "Hamilton"
+        DateTime( 2009, 01, 31),  "Laura", "Norman"
+        DateTime( 2008, 12, 11),  "Jean", "Trenary"
+        DateTime( 2011, 02, 15), "Brian", "Welcker"
     |]
     
     Assert.Equal<_[]>(expected, actual)

@@ -43,7 +43,7 @@ let primaryKeysConfiguration (tables: string[]) (primaryKeyColumns: string[]) (e
     for name in entityTypeNames do
         let e = modelBuilder.Entity(name)
         let relational = e.Metadata.Relational()
-        sprintf "%s.%s" relational.Schema relational.Table
+        sprintf "%s.%s" relational.Schema relational.TableName
         |> pkByTable.TryFind 
         |> Option.iter (fun pkColumns ->
             e.Key( propertyNames = pkColumns.Split '\t') |> ignore
