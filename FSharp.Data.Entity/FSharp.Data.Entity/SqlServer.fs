@@ -39,7 +39,6 @@ let tablesConfiguration (entityTypeNames: string[], modelBuilder: ModelBuilder) 
         modelBuilder.Entity(name).ToTable(table, schema) |> ignore
 
 let primaryKeysConfiguration (primaryKeyColumns: (string * string)[]) (entityTypeNames: string[], modelBuilder: ModelBuilder) = 
-    //let pkByTable = (tables, primaryKeyColumns) ||> Array.zip |> Map.ofArray
     let pkByTable = Map.ofArray primaryKeyColumns
     for name in entityTypeNames do
         let e = modelBuilder.Entity(name)
@@ -113,9 +112,8 @@ let getSqlServerSchema connectionString =
 	                schemas.name + '.' + tables.name AS table_name
 	                ,columns.name AS column_name
                     ,is_nullable
-	                --,types.name AS typename
 	                ,is_identity
-	                --,is_readonly = CASE WHEN is_identity = 0 OR is_computed = 0 THEN 1 ELSE 0 END
+	                ,is_computed
 	                ,max_length
 	                ,default_constraint = ISNULL( OBJECT_DEFINITION(columns.default_object_id), '')
 	                ,is_part_of_primary_key = CASE WHEN index_columns.object_id IS NULL THEN 0 ELSE 1 END
@@ -123,9 +121,6 @@ let getSqlServerSchema connectionString =
 	                sys.schemas  
 	                JOIN sys.tables ON schemas.schema_id = tables.schema_id
 	                JOIN sys.columns ON columns.object_id = tables.object_id
-	                --JOIN sys.types ON columns.system_type_id = types.system_type_id 
-	                --	AND ((types.is_assembly_type = 1 AND columns.user_type_id = types.user_type_id) 
-	                --		OR columns.system_type_id = types.user_type_id)
 	                LEFT JOIN sys.indexes ON 
 		                tables.object_id = indexes.object_id 
 		                AND indexes.is_primary_key = 1
@@ -133,32 +128,31 @@ let getSqlServerSchema connectionString =
 		                index_columns.object_id = tables.object_id 
 		                AND index_columns.index_id = indexes.index_id 
 		                AND columns.column_id = index_columns.column_id
-                ORDER BY 
-                    tables.object_id, columns.column_id            
             " 
             use conn = openConnection()
-            let pks, contraints = 
+            let columns = 
                 conn.Execute( getColumnsQuery)
                 |> Seq.map( fun x ->
-                    let tableName: string = x ? table_name
-                    let columnName = x ? column_name 
-                    (tableName, columnName, x ? is_part_of_primary_key = 1),
-                    (tableName, columnName, x ? is_nullable, x ? is_identity, x ? max_length, x ? default_constraint)
+                    x ? table_name, 
+                    x ? column_name, 
+                    x ? is_part_of_primary_key = 1, 
+                    (x ? is_nullable, x ? is_identity, x ? max_length, x ? is_computed, x ? default_constraint)
                 )
                 |> Seq.toArray
-                |> Array.unzip
 
             let primaryKeyColumns = 
                 let elements =  
                     query {
-                        for (tableName: string), columnName, isPartOfPrimaryKey in pks do
+                        for (tableName: string), columnName, isPartOfPrimaryKey, _ in columns do
                         where isPartOfPrimaryKey
                         groupValBy columnName tableName into g
                         let table = Expr.Value( g.Key)
                         let pkColumns = Expr.Value( String.concat "\t" g)
                         select (Expr.NewTuple [ table; pkColumns ])
                     }
-                Expr.NewArray(typeof<string * string>, elements |> Seq.toList)
+                    |> Seq.toList
+
+                Expr.NewArray(typeof<string * string>, elements)
 
             <@ 
                 fun (entityNames, modelBuilder) ->
@@ -166,28 +160,6 @@ let getSqlServerSchema connectionString =
                     primaryKeysConfiguration %%primaryKeyColumns (entityNames, modelBuilder)
             @>
 
-//            let columns = 
-//                conn.Execute(query, [ "@tableName", twoPartTableName ]) 
-//                |> Seq.map(fun x -> 
-//                    { 
-//                        Name = x ? name
-//                        Type = Type.GetType( typeMappings.Value.[x ? typename], throwOnError = true)
-//                        IsNullable = x ? is_nullable
-//                        IsIdentity = x ? is_identity
-//                        IsReadOnly = x ? is_readonly = 0 
-//                        IsPartOfPrimaryKey = x ? is_part_of_primary_key = 1
-//                        DefaultValue = x.TryGetValue("default_constraint")
-//                    }
-//                )
-//                |> Seq.toArray
-
-//            let config = 
-//                let pkColumns = [| for c in columns do if c.IsPartOfPrimaryKey then yield c.Name |]
-//                <@ fun(entity: EntityTypeBuilder) ->
-//                    entity.Key(pkColumns) |> ignore
-//                @>
-//            columns, config
-//
 //        member __.GetForeignKeys( twoPartTableName) = [|
 //            let query = "
 //                SELECT 
