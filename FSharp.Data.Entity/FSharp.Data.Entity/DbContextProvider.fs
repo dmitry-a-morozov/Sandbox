@@ -47,9 +47,11 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
         providerType.DefineStaticParameters(
             parameters = [ 
                 ProvidedStaticParameter("ConnectionString", typeof<string>) 
+                ProvidedStaticParameter("Pluralize", typeof<bool>, false) 
+                ProvidedStaticParameter("SuppressForeignKeyProperties", typeof<bool>, false) 
             ],             
             instantiationFunction = (fun typeName args ->   
-                this.CreateDbContextType(typeName, unbox args.[0])
+                this.CreateDbContextType(typeName, unbox args.[0], unbox args.[1])
             )        
         )
 
@@ -67,7 +69,7 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
         )
         |> defaultArg <| base.ResolveAssembly( args)
 
-    member internal this.CreateDbContextType( typeName, connectionString) = 
+    member internal this.CreateDbContextType( typeName, connectionString, pluralize) = 
         let dbContextType = ProvidedTypeDefinition(assembly, nameSpace, typeName, baseType = Some typeof<DbContext>, HideObjectMethods = true, IsErased = false)
         tempAssembly.AddTypes [ dbContextType ]
 
@@ -89,7 +91,7 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
 
         let sqlServerSchema = DesignTime.SqlServer.getSqlServerSchema connectionString
 
-        this.AddEntityTypesAndDataSets(dbContextType, sqlServerSchema)
+        this.AddEntityTypesAndDataSets(dbContextType, sqlServerSchema, pluralize)
 
         do 
             let name = "OnConfiguring"
@@ -143,17 +145,13 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
 
         dbContextType
 
-    member internal this.AddEntityTypesAndDataSets(dbConTextType: ProvidedTypeDefinition, schema: IInformationSchema) = 
+    member internal this.AddEntityTypesAndDataSets(dbConTextType: ProvidedTypeDefinition, schema: IInformationSchema, pluralize) = 
         dbConTextType.AddMembersDelayed <| fun () ->
             let entityTypes = [
 
                 for tableName in schema.GetTables() do   
 
                     let tableType = ProvidedTypeDefinition(tableName , baseType = None, IsErased = false)
-//                    let schemaName, table = DesignTime.SqlServer.(|TwoPartName|) tableName
-//                    
-//                    do
-//                        addCustomAttribute<TableAttribute, _> (tableType, [ table ], [ "Schema", box schemaName ])
 
                     do 
                         let ctor = ProvidedConstructor([], InvokeCode = fun _ -> <@@ () @@>)
@@ -186,23 +184,12 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
 
             let props = [
                 for e in entityTypes do
-                    let field, prop = this.GetDbSetPropAndField(e)
-                    yield field :> MemberInfo
-                    yield prop :> _
+                    let name = if pluralize then e.Name.Pluralize() else e.Name
+                    let t = ProvidedTypeBuilder.MakeGenericType( typedefof<_ DbSet>, [ e ])
+                    yield! getAutoProperty(name, t)
             ]
 
             [ for x in entityTypes -> x :> MemberInfo ] @ props
-
-    member internal this.GetDbSetPropAndField(entityType: ProvidedTypeDefinition) = 
-        let ``type`` = ProvidedTypeBuilder.MakeGenericType( typedefof<_ DbSet>, [ entityType ])
-        let name = entityType.Name.Pluralize()
-        let field = ProvidedField(name, ``type``)
-        let prop = ProvidedProperty(name, ``type``)
-        prop.GetterCode <- fun args -> Expr.FieldGet(args.[0], field)
-        prop.SetterCode <- fun args -> Expr.FieldSet(args.[0], field, args.[1])
-        field, prop
-
-        
 
 [<assembly:TypeProviderAssembly()>]
 do()

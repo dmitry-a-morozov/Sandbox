@@ -5,7 +5,7 @@ open Xunit
 open FSharp.Data.Entity
 
 //I want to call provided type DbContext not DbContextProvider
-type AdventureWorks = DbContext<"Data Source=.;Initial Catalog=AdventureWorks2014;Integrated Security=True">
+type AdventureWorks = DbContext<"Data Source=.;Initial Catalog=AdventureWorks2014;Integrated Security=True", Pluralize = true>
 //but compiler gets confused therefore following line should be after TP declaration
 open Microsoft.Data.Entity
 
@@ -15,9 +15,9 @@ let db = new AdventureWorks()
 [<Fact>]
 let getTableContent() = 
     let expected = [|
-        (1uy,"Day",  TimeSpan.Parse("07:00:00"), TimeSpan.Parse("15:00:00"), DateTime.Parse("2008-04-30"))
-        (2uy,"Evening", TimeSpan.Parse("15:00:00"), TimeSpan.Parse("23:00:00"), DateTime.Parse("2008-04-30"))
-        (3uy,"Night", TimeSpan.Parse("23:00:00"), TimeSpan.Parse("07:00:00"), DateTime.Parse("2008-04-30"))
+        ( 1uy, "Day",  TimeSpan.Parse("07:00:00"), TimeSpan.Parse("15:00:00"), DateTime.Parse("2008-04-30"))
+        ( 2uy, "Evening", TimeSpan.Parse("15:00:00"), TimeSpan.Parse("23:00:00"), DateTime.Parse("2008-04-30"))
+        ( 3uy, "Night", TimeSpan.Parse("23:00:00"), TimeSpan.Parse("07:00:00"), DateTime.Parse("2008-04-30"))
     |]
 
     let actual = [| for x in db.``HumanResources.Shifts`` -> x.ShiftID, x.Name, x.StartTime, x.EndTime, x.ModifiedDate |]
@@ -101,17 +101,17 @@ let innerJoin() =
             join p in db.``Person.People`` on (e.BusinessEntityID = p.BusinessEntityID)
             where (e.OrganizationLevel = Nullable(1s))
             sortBy p.LastName
-            select(e.HireDate, p.FirstName,  p.LastName)
+            select(e.HireDate, String.Format("{0} {1}", p.FirstName, p.LastName))
         }
         |> Seq.toArray
 
     let expected = [|
-        DateTime( 2007, 12, 20),  "David", "Bradley"
-        DateTime( 2008, 01, 31),  "Terri", "Duffy"
-        DateTime( 2009, 02, 03),  "James", "Hamilton"
-        DateTime( 2009, 01, 31),  "Laura", "Norman"
-        DateTime( 2008, 12, 11),  "Jean", "Trenary"
-        DateTime( 2011, 02, 15), "Brian", "Welcker"
+        DateTime( 2007, 12, 20),  "David Bradley"
+        DateTime( 2008, 01, 31),  "Terri Duffy"
+        DateTime( 2009, 02, 03),  "James Hamilton"
+        DateTime( 2009, 01, 31),  "Laura Norman"
+        DateTime( 2008, 12, 11),  "Jean Trenary"
+        DateTime( 2011, 02, 15), "Brian Welcker"
     |]
     
     Assert.Equal<_[]>(expected, actual)

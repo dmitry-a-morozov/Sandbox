@@ -38,8 +38,9 @@ let tablesConfiguration (entityTypeNames: string[], modelBuilder: ModelBuilder) 
 
         modelBuilder.Entity(name).ToTable(table, schema) |> ignore
 
-let primaryKeysConfiguration (tables: string[]) (primaryKeyColumns: string[]) (entityTypeNames: string[], modelBuilder: ModelBuilder) = 
-    let pkByTable = (tables, primaryKeyColumns) ||> Array.zip |> Map.ofArray
+let primaryKeysConfiguration (primaryKeyColumns: (string * string)[]) (entityTypeNames: string[], modelBuilder: ModelBuilder) = 
+    //let pkByTable = (tables, primaryKeyColumns) ||> Array.zip |> Map.ofArray
+    let pkByTable = Map.ofArray primaryKeyColumns
     for name in entityTypeNames do
         let e = modelBuilder.Entity(name)
         let relational = e.Metadata.Relational()
@@ -65,7 +66,7 @@ let getSqlServerSchema connectionString =
                 let typeName = string x.["TypeName"]
                 let sqlEngineTypeName, clrTypeName = 
                     match typeName.Split([|','|], 2) with
-                    | [| "Microsoft.SqlServer.Types.SqlHierarchyId"; _ |] ->  "hierarchyid", typeName
+                    | [| "Microsoft.SqlServer.Types.SqlHierarchyId"; _ |] -> "hierarchyid", typeName
                     | [| "Microsoft.SqlServer.Types.SqlGeometry"; _ |] -> "geometry", typeName
                     | [| "Microsoft.SqlServer.Types.SqlGeography"; _ |] -> "geography", typeName
                     | [| "tinyint" |] -> typeName, typeof<byte>.FullName
@@ -111,11 +112,12 @@ let getSqlServerSchema connectionString =
                 SELECT 
 	                schemas.name + '.' + tables.name AS table_name
 	                ,columns.name AS column_name
+                    ,is_nullable
 	                --,types.name AS typename
-	                --,is_identity
+	                ,is_identity
 	                --,is_readonly = CASE WHEN is_identity = 0 OR is_computed = 0 THEN 1 ELSE 0 END
-	                --,columns.max_length
-	                --,default_constraint = OBJECT_DEFINITION(columns.default_object_id)
+	                ,max_length
+	                ,default_constraint = ISNULL( OBJECT_DEFINITION(columns.default_object_id), '')
 	                ,is_part_of_primary_key = CASE WHEN index_columns.object_id IS NULL THEN 0 ELSE 1 END
                 FROM
 	                sys.schemas  
@@ -135,26 +137,33 @@ let getSqlServerSchema connectionString =
                     tables.object_id, columns.column_id            
             " 
             use conn = openConnection()
-            let columns = [|
-                for x in conn.Execute( getColumnsQuery) do
-                    yield x.GetString(0), x.GetString(1), x.GetInt32(2) = 1
-            |]
-
-            let tables, primaryKeyColumns = 
-                query {
-                    for tableName, columnName, isPartOfPrimaryKey in columns do
-                    where isPartOfPrimaryKey
-                    groupValBy columnName tableName into g
-                    select (g.Key, String.concat "\t" g)
-                    //select (g.Key, Array.ofSeq g)
-                }
+            let pks, contraints = 
+                conn.Execute( getColumnsQuery)
+                |> Seq.map( fun x ->
+                    let tableName: string = x ? table_name
+                    let columnName = x ? column_name 
+                    (tableName, columnName, x ? is_part_of_primary_key = 1),
+                    (tableName, columnName, x ? is_nullable, x ? is_identity, x ? max_length, x ? default_constraint)
+                )
                 |> Seq.toArray
                 |> Array.unzip
+
+            let primaryKeyColumns = 
+                let elements =  
+                    query {
+                        for (tableName: string), columnName, isPartOfPrimaryKey in pks do
+                        where isPartOfPrimaryKey
+                        groupValBy columnName tableName into g
+                        let table = Expr.Value( g.Key)
+                        let pkColumns = Expr.Value( String.concat "\t" g)
+                        select (Expr.NewTuple [ table; pkColumns ])
+                    }
+                Expr.NewArray(typeof<string * string>, elements |> Seq.toList)
 
             <@ 
                 fun (entityNames, modelBuilder) ->
                     tablesConfiguration(entityNames, modelBuilder)
-                    primaryKeysConfiguration tables primaryKeyColumns (entityNames, modelBuilder)
+                    primaryKeysConfiguration %%primaryKeyColumns (entityNames, modelBuilder)
             @>
 
 //            let columns = 
