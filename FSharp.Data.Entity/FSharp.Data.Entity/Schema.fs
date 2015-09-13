@@ -4,9 +4,19 @@ open System
 open FSharp.Quotations
 open Microsoft.Data.Entity
 
-type IInformationSchema = 
+type internal ForeignKey = {
+    Name: string
+    //Ordinal: int
+    Column: string
+    ParentTableSchema: string
+    ParentTable: string
+    ParentTableColumn: string
+}
+
+type internal IInformationSchema = 
     abstract GetTables: unit -> string[] 
     abstract GetColumns: tableName: string -> (string * Type)[]
+    abstract GetForeignKeys : tableName: string -> (string * string)[]
     abstract ModelConfiguration: Expr<string[] * ModelBuilder -> unit>
 
 //type Column = {
@@ -18,13 +28,4 @@ type IInformationSchema =
 //    IsPartOfPrimaryKey: bool
 //    DefaultValue: obj option
 //}
-//
-//type ForeignKey = {
-//    Name: string
-//    Ordinal: int
-//    Column: string
-//    ParentTableSchema: string
-//    ParentTable: string
-//    ParentTableColumn: string
-//}
-//
+

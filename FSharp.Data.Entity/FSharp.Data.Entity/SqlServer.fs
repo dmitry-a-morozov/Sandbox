@@ -49,7 +49,7 @@ let primaryKeysConfiguration (primaryKeyColumns: (string * string)[]) (entityTyp
             e.Key( propertyNames = pkColumns.Split '\t') |> ignore
         )
 
-let getSqlServerSchema connectionString = 
+let internal getSqlServerSchema connectionString = 
     
     let (?) (row: SqlDataReader) (name: string) = unbox row.[name]
     
@@ -72,6 +72,42 @@ let getSqlServerSchema connectionString =
                     | _ -> typeName, string x.["DataType"]
                 yield sqlEngineTypeName, clrTypeName
         |]
+
+    let getAllColumns() = 
+        let getColumnsQuery = "
+            SELECT 
+	            schemas.name + '.' + tables.name AS table_name
+	            ,columns.name AS column_name
+                ,is_nullable
+	            ,is_identity
+	            ,is_computed
+	            ,max_length
+	            ,default_constraint = ISNULL( OBJECT_DEFINITION(columns.default_object_id), '')
+	            ,is_part_of_primary_key = CASE WHEN index_columns.object_id IS NULL THEN 0 ELSE 1 END
+            FROM
+	            sys.schemas  
+	            JOIN sys.tables ON schemas.schema_id = tables.schema_id
+	            JOIN sys.columns ON columns.object_id = tables.object_id
+	            LEFT JOIN sys.indexes ON 
+		            tables.object_id = indexes.object_id 
+		            AND indexes.is_primary_key = 1
+	            LEFT JOIN sys.index_columns ON 
+		            index_columns.object_id = tables.object_id 
+		            AND index_columns.index_id = indexes.index_id 
+		            AND columns.column_id = index_columns.column_id
+        " 
+        use conn = openConnection()
+        conn.Execute( getColumnsQuery)
+        |> Seq.map( fun x ->
+            x ? table_name, 
+            x ? column_name, 
+            x ? is_part_of_primary_key = 1, 
+            (x ? is_nullable, x ? is_identity, x ? max_length, x ? is_computed, x ? default_constraint)
+        )
+        |> Seq.toArray
+
+    let getAllForeignKeys() =
+        ()
 
     { new IInformationSchema with
         member __.GetTables() = [|
@@ -107,40 +143,9 @@ let getSqlServerSchema connectionString =
         |]            
 
         member __.ModelConfiguration = 
-            let getColumnsQuery = "
-                SELECT 
-	                schemas.name + '.' + tables.name AS table_name
-	                ,columns.name AS column_name
-                    ,is_nullable
-	                ,is_identity
-	                ,is_computed
-	                ,max_length
-	                ,default_constraint = ISNULL( OBJECT_DEFINITION(columns.default_object_id), '')
-	                ,is_part_of_primary_key = CASE WHEN index_columns.object_id IS NULL THEN 0 ELSE 1 END
-                FROM
-	                sys.schemas  
-	                JOIN sys.tables ON schemas.schema_id = tables.schema_id
-	                JOIN sys.columns ON columns.object_id = tables.object_id
-	                LEFT JOIN sys.indexes ON 
-		                tables.object_id = indexes.object_id 
-		                AND indexes.is_primary_key = 1
-	                LEFT JOIN sys.index_columns ON 
-		                index_columns.object_id = tables.object_id 
-		                AND index_columns.index_id = indexes.index_id 
-		                AND columns.column_id = index_columns.column_id
-            " 
-            use conn = openConnection()
-            let columns = 
-                conn.Execute( getColumnsQuery)
-                |> Seq.map( fun x ->
-                    x ? table_name, 
-                    x ? column_name, 
-                    x ? is_part_of_primary_key = 1, 
-                    (x ? is_nullable, x ? is_identity, x ? max_length, x ? is_computed, x ? default_constraint)
-                )
-                |> Seq.toArray
+            let columns = getAllColumns() |> Seq.toArray
 
-            let primaryKeyColumns = 
+            let primaryKeysByTable = 
                 let elements =  
                     query {
                         for (tableName: string), columnName, isPartOfPrimaryKey, _ in columns do
@@ -157,37 +162,26 @@ let getSqlServerSchema connectionString =
             <@ 
                 fun (entityNames, modelBuilder) ->
                     tablesConfiguration(entityNames, modelBuilder)
-                    primaryKeysConfiguration %%primaryKeyColumns (entityNames, modelBuilder)
+                    primaryKeysConfiguration %%primaryKeysByTable (entityNames, modelBuilder)
             @>
 
-//        member __.GetForeignKeys( twoPartTableName) = [|
-//            let query = "
-//                SELECT 
-//	                FK.name AS Name
-//	                ,Child.name AS [Column]
-//	                ,OBJECT_SCHEMA_NAME(Parent.object_id) AS ParentTableSchema
-//	                ,OBJECT_NAME(Parent.object_id) AS ParentTable
-//	                ,Parent.name AS ParentTableColumn 
-//                FROM sys.foreign_keys AS FK
-//	                JOIN sys.foreign_key_columns AS FKC ON FK.object_id = FKC.constraint_object_id
-//	                JOIN sys.columns AS Child ON 
-//                        FKC.referenced_column_id = Child.column_id
-//		                AND FKC.parent_object_id = Child.object_id
-//	                JOIN sys.columns AS Parent ON 
-//                        FKC.referenced_column_id = Parent.column_id
-//		                AND FKC.referenced_object_id = Parent.object_id
-//                WHERE 
-//                    FK.parent_object_id = OBJECT_ID( @tableName)
-//            " 
-//            use conn = openConnection()
-//            for x in conn.Execute(query, [ "@tableName", twoPartTableName ]) do
-//                yield { 
-//                    Name = x ? Name
-//                    Ordinal = x ? Ordinal
-//                    Column = x ? Column
-//                    ParentTableSchema = x ? ParentTableSchema
-//                    ParentTable = x ? ParentTable
-//                    ParentTableColumn = x ? ParentTableColumn
-//                }
-//        |]
+        member __.GetForeignKeys( tableName) = 
+            let query = 
+                "
+                    SELECT 
+	                    FK.name 
+	                    ,OBJECT_SCHEMA_NAME(Parent.object_id) + '.'	+ OBJECT_NAME(Parent.object_id) 
+                    FROM sys.foreign_keys AS FK
+	                    JOIN sys.foreign_key_columns AS FKC ON FK.object_id = FKC.constraint_object_id
+	                    JOIN sys.columns AS Parent ON 
+                            FKC.referenced_column_id = Parent.column_id
+		                    AND FKC.referenced_object_id = Parent.object_id
+                    WHERE 
+                        FK.parent_object_id = OBJECT_ID( @tableName)
+                "
+            use conn = openConnection()
+            conn.Execute( query, [ "@tableName", tableName ])
+            |> Seq.map(fun x -> x.GetString(0), x.GetString(1))
+            |> Seq.distinct
+            |> Seq.toArray
     }

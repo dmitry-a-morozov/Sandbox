@@ -51,7 +51,7 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
                 ProvidedStaticParameter("SuppressForeignKeyProperties", typeof<bool>, false) 
             ],             
             instantiationFunction = (fun typeName args ->   
-                this.CreateDbContextType(typeName, unbox args.[0], unbox args.[1])
+                this.CreateDbContextType(typeName, unbox args.[0], unbox args.[1], unbox args.[2])
             )        
         )
 
@@ -69,7 +69,7 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
         )
         |> defaultArg <| base.ResolveAssembly( args)
 
-    member internal this.CreateDbContextType( typeName, connectionString, pluralize) = 
+    member internal this.CreateDbContextType( typeName, connectionString, pluralize, suppressForeignKeyProperties) = 
         let dbContextType = ProvidedTypeDefinition(assembly, nameSpace, typeName, baseType = Some typeof<DbContext>, HideObjectMethods = true, IsErased = false)
         tempAssembly.AddTypes [ dbContextType ]
 
@@ -91,7 +91,7 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
 
         let sqlServerSchema = DesignTime.SqlServer.getSqlServerSchema connectionString
 
-        this.AddEntityTypesAndDataSets(dbContextType, sqlServerSchema, pluralize)
+        this.AddEntityTypesAndDataSets(dbContextType, sqlServerSchema, pluralize, suppressForeignKeyProperties)
 
         do 
             let name = "OnConfiguring"
@@ -145,7 +145,7 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
 
         dbContextType
 
-    member internal this.AddEntityTypesAndDataSets(dbConTextType: ProvidedTypeDefinition, schema: IInformationSchema, pluralize) = 
+    member internal this.AddEntityTypesAndDataSets(dbConTextType: ProvidedTypeDefinition, schema: IInformationSchema, pluralize, suppressForeignKeyProperties) = 
         dbConTextType.AddMembersDelayed <| fun () ->
             let entityTypes = [
 
@@ -165,16 +165,16 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
 
                                     yield! getAutoProperty(name, clrType)
 
-//                                for fk in schema.GetForeignKeys(tableName) do   
-//                                    let parentEntityName = sprintf "%s.%s" fk.ParentTableSchema fk.ParentTable
-//                                    let parent: ProvidedTypeDefinition = downcast dbConTextType.GetNestedType( parentEntityName) 
-//
-//                                    yield! getAutoProperty(fk.ParentTable.Pluralize(), parent)
-//                                    
-//                                    parent.AddMembersDelayed <| fun () -> 
-//                                        let collectionType = ProvidedTypeBuilder.MakeGenericType(typedefof<_ List>, [ tableType ])
-//                                        let table = tableName.Split('.').[1]
-//                                        getAutoProperty(table.Pluralize(), collectionType)
+                                if not suppressForeignKeyProperties
+                                then 
+                                    for fkName, parent in schema.GetForeignKeys(tableName) do   
+                                        let parent: ProvidedTypeDefinition = downcast dbConTextType.GetNestedType( parent) 
+                                        yield! getAutoProperty(fkName, parent)
+                                    
+                                        parent.AddMembersDelayed <| fun () -> 
+                                            let collectionType = ProvidedTypeBuilder.MakeGenericType(typedefof<_ List>, [ tableType ])
+                                            let table = tableName.Split('.').[1]
+                                            getAutoProperty(fkName, collectionType)
                             ]
 
                     yield tableType
