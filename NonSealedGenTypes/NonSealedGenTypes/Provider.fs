@@ -33,24 +33,36 @@ type public NonSealedTypesProvider(config: TypeProviderConfig) as this =
 
         this.AddNamespace( nameSpace, [ providerType ])
 
-    member internal this.CreateRootType( typeName, nestedTypeNames) = 
+    member internal this.CreateRootType( typeName, nestedTypeNames: string) = 
         let root = ProvidedTypeDefinition(assembly, nameSpace, typeName, baseType = Some typeof<obj>, HideObjectMethods = true, IsErased = false)
 
-        do
-            let ctor = ProvidedConstructor( [ ProvidedParameter("x",  typeof<int>) ], IsImplicitCtor = true)
-            let baseCtor = typeof<obj>.GetConstructors().[0]
-            let ps = baseCtor.GetParameters()
-            ctor.BaseConstructorCall <- fun args -> baseCtor, [ args.Head ]
-            root.AddMember ctor
-
-        root.AddMember <| ProvidedProperty("X", typeof<int>, GetterCode = fun args -> <@@ Expr.GlobalVar<int>("x") @@> )
         tempAssembly.AddTypes [ root ]
 
-        root.SetAttributes( root.Attributes &&& ~~~TypeAttributes.Sealed)
-
         root.AddMembersDelayed <| fun() ->
-            [
-            ]
+            let nestedTypes = 
+                nestedTypeNames.Split(',')
+                |> Array.map (fun typename -> 
+                    let t = ProvidedTypeDefinition(typename, Some typeof<obj>, IsErased = false)
+                    t.SetAttributes(root.Attributes ||| TypeAttributes.Abstract &&& ~~~TypeAttributes.Sealed)
+
+                    t.AddMember <| ProvidedConstructor( [ ProvidedParameter("name",  typeof<int>) ], IsImplicitCtor = true)
+
+                    t.AddMember <| ProvidedProperty("Greeeting", typeof<string>, GetterCode = fun args -> <@@ sprintf "Hello, I'm %s." %Expr.GlobalVar<int>("name") @@> )
+                    
+                    do
+                        let parameters = [ ProvidedParameter("id", typeof<int>) ]
+                        let m = ProvidedMethod("GetData", parameters, typeof<Async<seq<string>>>)
+                        m.InvokeCode <- fun args -> <@@  raise( System.NotImplementedException()) @@>
+                        m.SetMethodAttrs(m.Attributes ||| MethodAttributes.Abstract ||| MethodAttributes.Virtual)
+                        root.AddMember m
+
+                    t
+                )
+                |> Array.toList
+
+            tempAssembly.AddTypes nestedTypes
+
+            nestedTypes
 
         root
 
