@@ -2,19 +2,19 @@
 
 type Root = NonSealedGenTypes.RootProvider<"One,Two">
 
-type MyRoot(x) =
-    inherit Root(x)
-
-    override __.GetData(id) = 
-        async.Return(upcast [ "Hello"; "world" ])
-
 type MyOne() =
-    inherit Root.One()
+    inherit Root.One("one")
 
-
-let root = MyRoot(112)
-root.X
-root.GetData(42) |> Async.RunSynchronously
+    override this.GetData(id) = 
+        async.Return(sprintf "Data for %s. Id - %i" this.Greeeting id)
 
 let myone = MyOne()
 myone.Greeeting
+myone.GetData(42) |> Async.RunSynchronously
+
+let two = {
+    new Root.Two("tow") with
+        member this.GetData(id) = 
+            async.Return(sprintf "Data for %s. Id - %i" this.Greeeting id)
+}
+

@@ -45,16 +45,16 @@ type public NonSealedTypesProvider(config: TypeProviderConfig) as this =
                     let t = ProvidedTypeDefinition(typename, Some typeof<obj>, IsErased = false)
                     t.SetAttributes(root.Attributes ||| TypeAttributes.Abstract &&& ~~~TypeAttributes.Sealed)
 
-                    t.AddMember <| ProvidedConstructor( [ ProvidedParameter("name",  typeof<int>) ], IsImplicitCtor = true)
+                    t.AddMember <| ProvidedConstructor( [ ProvidedParameter("name",  typeof<string>) ], IsImplicitCtor = true)
 
-                    t.AddMember <| ProvidedProperty("Greeeting", typeof<string>, GetterCode = fun args -> <@@ sprintf "Hello, I'm %s." %Expr.GlobalVar<int>("name") @@> )
+                    t.AddMember <| ProvidedProperty("Greeeting", typeof<string>, GetterCode = fun args -> <@@ sprintf "Hello, I'm %s." (%Expr.GlobalVar("name")) @@> )
                     
                     do
                         let parameters = [ ProvidedParameter("id", typeof<int>) ]
-                        let m = ProvidedMethod("GetData", parameters, typeof<Async<seq<string>>>)
+                        let m = ProvidedMethod("GetData", parameters, typeof<string Async>)
                         m.InvokeCode <- fun args -> <@@  raise( System.NotImplementedException()) @@>
                         m.SetMethodAttrs(m.Attributes ||| MethodAttributes.Abstract ||| MethodAttributes.Virtual)
-                        root.AddMember m
+                        t.AddMember m
 
                     t
                 )
