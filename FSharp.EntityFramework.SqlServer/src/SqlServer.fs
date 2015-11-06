@@ -1,4 +1,5 @@
-﻿module FSharp.Data.Entity.DesignTime.SqlServer
+﻿[<AutoOpen>]
+module FSharp.Data.Entity.Internals.InformationSchema
 
 open System
 open System.Data.SqlClient
@@ -6,6 +7,33 @@ open System.Data
 open Microsoft.FSharp.Quotations
 open Microsoft.Data.Entity
 open ProviderImplementation.ProvidedTypes
+
+type internal ForeignKey = {
+    Name: string
+    //Ordinal: int
+    Column: string
+    ParentTableSchema: string
+    ParentTable: string
+    ParentTableColumn: string
+}
+
+type internal IInformationSchema = 
+    abstract GetTables: unit -> string[] 
+    abstract GetColumns: tableName: string -> (string * Type)[]
+    abstract GetForeignKeys : tableName: string -> (string * string)[]
+    abstract ModelConfiguration: Expr<string[] * ModelBuilder -> unit>
+
+//type Column = {
+//    Name: string
+//    DbTypeName: Type
+//    IsNullable: bool
+//    IsIdentity: bool
+//    IsReadOnly: bool
+//    IsPartOfPrimaryKey: bool
+//    DefaultValue: obj option
+//}
+
+
 
 type SqlConnection with 
     member internal this.Execute(query, ?parameters) = 
@@ -46,7 +74,7 @@ let primaryKeysConfiguration (primaryKeyColumns: (string * string)[]) (entityTyp
         sprintf "%s.%s" relational.Schema relational.TableName
         |> pkByTable.TryFind 
         |> Option.iter (fun pkColumns ->
-            e.Key( propertyNames = pkColumns.Split '\t') |> ignore
+            e.HasKey( propertyNames = pkColumns.Split '\t') |> ignore
         )
 
 let internal getSqlServerSchema connectionString = 

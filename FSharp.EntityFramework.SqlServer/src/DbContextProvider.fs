@@ -18,7 +18,7 @@ open ProviderImplementation.ProvidedTypes
 
 open Inflector
 
-open FSharp.Data.Entity.DesignTime
+open FSharp.Data.Entity.Internals
 
 [<TypeProvider>]
 type public DbContextProvider(config: TypeProviderConfig) as this = 
@@ -89,7 +89,7 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
                         yield ctor
                 ]
 
-        let sqlServerSchema = DesignTime.SqlServer.getSqlServerSchema connectionString
+        let sqlServerSchema = getSqlServerSchema connectionString
 
         this.AddEntityTypesAndDataSets(dbContextType, sqlServerSchema, pluralize, suppressForeignKeyProperties)
 

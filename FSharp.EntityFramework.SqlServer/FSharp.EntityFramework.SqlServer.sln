@@ -3,9 +3,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 14
 VisualStudioVersion = 14.0.23107.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FSharp.Data.Entity", "FSharp.Data.Entity\FSharp.Data.Entity.fsproj", "{3B113395-2264-431E-B349-55FD268DD13D}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FSharp.EntityFramework.SqlServer", "src\FSharp.EntityFramework.SqlServer.fsproj", "{3B113395-2264-431E-B349-55FD268DD13D}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FSharp.Data.Entity.Tests", "FSharp.Data.Entity.Tests\FSharp.Data.Entity.Tests.fsproj", "{DB0BBD66-D87D-4166-91AD-307DDBA61A51}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FSharp.EntityFramework.SqlServer.Tests", "test\FSharp.EntityFramework.SqlServer.Tests.fsproj", "{DB0BBD66-D87D-4166-91AD-307DDBA61A51}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
