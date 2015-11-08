@@ -1,7 +1,7 @@
 ﻿#load "EFDependecies.fsx"
 
 #r @"System.Transactions.dll"
-#r @"..\FSharp.Data.Entity\bin\Debug\FSharp.Data.Entity.dll"
+#r @"..\src\bin\Debug\FSharp.EntityFramework.SqlServer.dll"
 
 open FSharp.Data.Entity
 

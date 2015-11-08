@@ -21,20 +21,15 @@ open Inflector
 open FSharp.Data.Entity.Internals
 
 [<TypeProvider>]
-type public DbContextProvider(config: TypeProviderConfig) as this = 
+type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this = 
     inherit TypeProviderForNamespaces()
 
     let nameSpace = this.GetType().Namespace
     let assembly = Assembly.LoadFrom( config.RuntimeAssembly)
-    let providerType = ProvidedTypeDefinition(assembly, nameSpace, "DbContext", Some typeof<obj>, HideObjectMethods = true, IsErased = false)
+    let providerType = ProvidedTypeDefinition(assembly, nameSpace, "SqlServer", Some typeof<obj>, HideObjectMethods = true, IsErased = false)
 
-    let tempAssembly = 
-        let name = Path.ChangeExtension( Path.GetRandomFileName(), "dll")
-        let fullPath = Path.Combine(config.TemporaryFolder, name)
-        ProvidedAssembly fullPath
-
-    do 
-        tempAssembly.AddTypes [ providerType ]
+    do
+        providerType.AddToTempAssembly()
 
     let getAutoProperty(name: string, clrType) = 
         let backingField = ProvidedField(name.Camelize(), clrType)
@@ -71,12 +66,14 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
 
     member internal this.CreateDbContextType( typeName, connectionString, pluralize, suppressForeignKeyProperties) = 
         let dbContextType = ProvidedTypeDefinition(assembly, nameSpace, typeName, baseType = Some typeof<DbContext>, HideObjectMethods = true, IsErased = false)
-        tempAssembly.AddTypes [ dbContextType ]
+
+        do
+            dbContextType.AddToTempAssembly()
 
         do 
             dbContextType.AddMembersDelayed <| fun() ->
                 [
-                    let parameterlessCtor = ProvidedConstructor([], IsImplicitCtor = true)
+                    let parameterlessCtor = ProvidedConstructor([], InvokeCode = fun _ -> <@@ () @@>)
                     parameterlessCtor.BaseConstructorCall <- fun args -> 
                         let baseCtor = typeof<DbContext>.GetConstructor(BindingFlags.Instance ||| BindingFlags.NonPublic, null, [||], null) 
                         baseCtor, args
@@ -151,7 +148,7 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
 
                 for tableName in schema.GetTables() do   
 
-                    let tableType = ProvidedTypeDefinition(tableName , baseType = None, IsErased = false)
+                    let tableType = ProvidedTypeDefinition(tableName , baseType = Some typeof<obj>, IsErased = false)
 
                     do 
                         let ctor = ProvidedConstructor([], InvokeCode = fun _ -> <@@ () @@>)
@@ -162,7 +159,6 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
                         tableType.AddMembersDelayed <| fun() -> 
                             [
                                 for name, clrType in schema.GetColumns(tableName) do
-
                                     yield! getAutoProperty(name, clrType)
 
                                 if not suppressForeignKeyProperties
@@ -180,7 +176,8 @@ type public DbContextProvider(config: TypeProviderConfig) as this =
                     yield tableType
             ]
             
-            tempAssembly.AddTypes entityTypes
+            do  
+                ProvidedAssembly.GetTemp().AddTypes entityTypes 
 
             let props = [
                 for e in entityTypes do

@@ -5,7 +5,7 @@ open Xunit
 open FSharp.Data.Entity
 
 //I want to call provided type DbContext not DbContextProvider
-type AdventureWorks = DbContext<"Data Source=.;Initial Catalog=AdventureWorks2014;Integrated Security=True", Pluralize = true>
+type AdventureWorks = SqlServer<"Data Source=.;Initial Catalog=AdventureWorks2014;Integrated Security=True", Pluralize = true>
 //but compiler gets confused therefore following line should be after TP declaration
 open Microsoft.Data.Entity
 
@@ -115,53 +115,53 @@ let innerJoin() =
     
     Assert.Equal<_[]>(expected, actual)
 
-open System.Linq
-        
-[<Fact>]
-let navigationQuery() = 
-        query {
-            for o in db.``Sales.SalesOrderHeaders`` do
-            let customer = o.FK_SalesOrderHeader_Customer_CustomerID
-            let personLastName = customer.FK_Customer_Person_PersonID.LastName
-            where (personLastName = "Zhou")
-            //groupBy customer.PersonID into g
-//            sortByNullableDescending g.Key
-            sumBy (o.TotalDue)
-        }
+//open System.Linq
+//        
+//[<Fact>]
+//let navigationQuery() = 
+//        query {
+//            for o in db.``Sales.SalesOrderHeaders`` do
+//            let customer = o.FK_SalesOrderHeader_Customer_CustomerID
+//            let personLastName = customer.FK_Customer_Person_PersonID.LastName
+//            where (personLastName = "Zhou")
+//            //groupBy customer.PersonID into g
+////            sortByNullableDescending g.Key
+//            sumBy (o.TotalDue)
+//        }
+////        |> Seq.take 3
+////        |> Seq.toArray
+//        |> printfn "Result %A"
+//
+//[<Fact(Skip="do not work :(")>]
+//let navigationQuery2() = 
+//        query {
+//            for c in 
+//                db.``Sales.Customers``
+//                .Include(fun x -> x.FK_Customer_Person_PersonID)
+//                .Include(fun x -> x.FK_SalesOrderHeader_Customer_CustomerID) do
+//            let person = c.FK_Customer_Person_PersonID
+//            where (person.LastName = "Zhou")
+//            //let totalOrders = query { for x in c.FK_SalesOrderHeader_Customer_CustomerID do sumBy x.TotalDue }
+//            //let totalOrders = c.FK_SalesOrderHeader_Customer_CustomerID |> Seq.toArray |> Array.sumBy (fun x -> x.TotalDue)
+//            //sortByDescending totalOrders
+//            for h in c.FK_SalesOrderHeader_Customer_CustomerID do
+//            select((person.FirstName, person.LastName), h.TotalDue)
+//        }
+//        |> Seq.toArray
+//        |> Seq.groupBy(fun x -> fst x)
+//        |> Seq.map(fun (name, xs) -> xs |> Seq.sumBy snd)
+//        //|> Seq.sortDescending
 //        |> Seq.take 3
 //        |> Seq.toArray
-        |> printfn "Result %A"
-
-[<Fact(Skip="do not work :(")>]
-let navigationQuery2() = 
-        query {
-            for c in 
-                db.``Sales.Customers``
-                .Include(fun x -> x.FK_Customer_Person_PersonID)
-                .Include(fun x -> x.FK_SalesOrderHeader_Customer_CustomerID) do
-            let person = c.FK_Customer_Person_PersonID
-            where (person.LastName = "Zhou")
-            //let totalOrders = query { for x in c.FK_SalesOrderHeader_Customer_CustomerID do sumBy x.TotalDue }
-            //let totalOrders = c.FK_SalesOrderHeader_Customer_CustomerID |> Seq.toArray |> Array.sumBy (fun x -> x.TotalDue)
-            //sortByDescending totalOrders
-            for h in c.FK_SalesOrderHeader_Customer_CustomerID do
-            select((person.FirstName, person.LastName), h.TotalDue)
-        }
-        |> Seq.toArray
-        |> Seq.groupBy(fun x -> fst x)
-        |> Seq.map(fun (name, xs) -> xs |> Seq.sumBy snd)
-        //|> Seq.sortDescending
-        |> Seq.take 3
-        |> Seq.toArray
-        |> printfn "Result %A"
-
-//select top 3 sum(h.TotalDue)
-//from Sales.Customer c 
-//	left join Sales.SalesOrderHeader h on h.CustomerID = c.CustomerID
-//	left join Person.Person p on c.PersonID = p.BusinessEntityID
-//where 
-//	p.LastName = 'Zhou'
-//group by p.FirstName, p.LastName
-//order by sum(h.TotalDue) desc
+//        |> printfn "Result %A"
 //
-//
+////select top 3 sum(h.TotalDue)
+////from Sales.Customer c 
+////	left join Sales.SalesOrderHeader h on h.CustomerID = c.CustomerID
+////	left join Person.Person p on c.PersonID = p.BusinessEntityID
+////where 
+////	p.LastName = 'Zhou'
+////group by p.FirstName, p.LastName
+////order by sum(h.TotalDue) desc
+////
+////
