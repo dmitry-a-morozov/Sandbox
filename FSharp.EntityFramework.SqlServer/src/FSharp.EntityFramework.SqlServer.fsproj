@@ -26,9 +26,10 @@
     <DocumentationFile>bin\Debug\FSharp.Data.Entity.XML</DocumentationFile>
     <StartAction>Program</StartAction>
     <StartProgram>C:\Program Files (x86)\Microsoft Visual Studio 14.0\Common7\IDE\devenv.exe</StartProgram>
-    <StartArguments>..\..\..\FSharp.EntityFramework.SqlServer.sln</StartArguments>
+    <StartArguments>..\..\..\Tests.sln</StartArguments>
     <OtherFlags>
     </OtherFlags>
+    <PlatformTarget>AnyCPU</PlatformTarget>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -59,7 +60,6 @@
     <Compile Include="ProvidedTypes.fsi" />
     <Compile Include="ProvidedTypes.fs" />
     <Compile Include="DebugProvidedTypes.fs" />
-    <Compile Include="ProvidedTypes.Extensions.fs" />
     <Compile Include="SqlServer.fs" />
     <Compile Include="SqlServerTypeProvider.fs" />
     <Content Include="packages.config" />

@@ -18,7 +18,23 @@ open ProviderImplementation.ProvidedTypes
 
 open Inflector
 
-open FSharp.Data.Entity.Internals
+open FSharp.Data.Entity.SqlServer
+
+[<AutoOpen; CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module ProvidedTypes = 
+    let inline addCustomAttribute<'T, ^P when 'T :> Attribute and ^P : (member AddCustomAttribute : System.Reflection.CustomAttributeData -> unit)> (provided: ^P, ctorArgs: obj list, namedArgs: list<string * obj>) = 
+        let attrData = { 
+            new CustomAttributeData() with
+                member __.Constructor = typeof<'T>.GetConstructor [| for value in ctorArgs -> value.GetType() |]
+                member __.ConstructorArguments = upcast [| for value in ctorArgs -> CustomAttributeTypedArgument value |]
+                member __.NamedArguments = 
+                    upcast [| 
+                        for propName, value in namedArgs do 
+                            let property = typeof<'T>.GetProperty propName
+                            yield CustomAttributeNamedArgument(property, value) 
+                    |] 
+        }
+        (^P : (member AddCustomAttribute : System.Reflection.CustomAttributeData -> unit) (provided, attrData))
 
 [<TypeProvider>]
 type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this = 
@@ -28,15 +44,26 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
     let assembly = Assembly.LoadFrom( config.RuntimeAssembly)
     let providerType = ProvidedTypeDefinition(assembly, nameSpace, "SqlServer", Some typeof<obj>, HideObjectMethods = true, IsErased = false)
 
-    do
-        providerType.AddToTempAssembly()
+    let getProvidedAssembly() = 
+        let assemblyFileName = Path.ChangeExtension( Path.GetTempFileName(), "dll")
+        ProvidedAssembly( assemblyFileName)
+
+    let addToProvidedTempAssembly types = 
+        getProvidedAssembly().AddTypes types
 
     let getAutoProperty(name: string, clrType) = 
         let backingField = ProvidedField(name.Camelize(), clrType)
         let property = ProvidedProperty(name, clrType)
         property.GetterCode <- fun args -> Expr.FieldGet( args.[0], backingField)
         property.SetterCode <- fun args -> Expr.FieldSet( args.[0], backingField, args.[1])
-        [ property :> MemberInfo; backingField :> _ ]
+        property, backingField 
+
+    let getAutoPropertyAsList(name, clrType): MemberInfo list = 
+        let p, f = getAutoProperty(name, clrType)
+        [ p; f ]
+
+    do
+        addToProvidedTempAssembly [ providerType ]
 
     do 
         providerType.DefineStaticParameters(
@@ -68,7 +95,7 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
         let dbContextType = ProvidedTypeDefinition(assembly, nameSpace, typeName, baseType = Some typeof<DbContext>, HideObjectMethods = true, IsErased = false)
 
         do
-            dbContextType.AddToTempAssembly()
+            addToProvidedTempAssembly [ dbContextType ]
 
         do 
             dbContextType.AddMembersDelayed <| fun() ->
@@ -86,9 +113,9 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
                         yield ctor
                 ]
 
-        let sqlServerSchema = getSqlServerSchema connectionString
+        //use conn = new SqlConnection( connectionString)
 
-        this.AddEntityTypesAndDataSets(dbContextType, sqlServerSchema, pluralize, suppressForeignKeyProperties)
+        this.AddEntityTypesAndDataSets(dbContextType, connectionString, pluralize, suppressForeignKeyProperties)
 
         do 
             let name = "OnConfiguring"
@@ -127,12 +154,14 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
             impl.SetMethodAttrs(vTableHandle.Attributes ||| MethodAttributes.Virtual)
             dbContextType.AddMember impl
             impl.InvokeCode <- fun args -> 
-                let defaultConfiguration = sqlServerSchema.ModelConfiguration
+                use conn = new SqlConnection( connectionString)
+                conn.Open()
+                let defaultConfiguration = conn.FluentAPIModelConfiguration
                 <@@ 
                     let modelBuilder: ModelBuilder = %%args.[1]
                     let dbContext: DbContext = %%Expr.Coerce(args.[0], typeof<DbContext>)
-                    let entityTypeNames = dbContext.GetType().GetNestedTypes() |> Array.map (fun x -> x.FullName)
-                    %defaultConfiguration <| (entityTypeNames, modelBuilder)
+                    let entityTypes = dbContext.GetType().GetNestedTypes() |> Array.filter (fun t -> t.IsDefined(typeof<TableAttribute>))
+                    %defaultConfiguration <| (entityTypes, modelBuilder)
                     let modelCreating = %%Expr.FieldGet(args.[0], field)
                     if box modelCreating <> null
                     then 
@@ -140,17 +169,24 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
                 @@>
             dbContextType.DefineMethodOverride(impl, vTableHandle)
 
+
         dbContextType
 
-    member internal this.AddEntityTypesAndDataSets(dbConTextType: ProvidedTypeDefinition, schema: IInformationSchema, pluralize, suppressForeignKeyProperties) = 
+    member internal this.AddEntityTypesAndDataSets(dbConTextType: ProvidedTypeDefinition, connectionString, pluralize, suppressForeignKeyProperties) = 
         dbConTextType.AddMembersDelayed <| fun () ->
+            
+            use conn = new SqlConnection( connectionString)
+            conn.Open()
+
             let entityTypes = [
 
-                for tableName in schema.GetTables() do   
+                for table in conn.GetTables() do   
+                    
+                    let twoPartTableName = table.TwoPartName
+                    let tableType = ProvidedTypeDefinition( twoPartTableName, baseType = Some typeof<obj>, IsErased = false)
+                    addCustomAttribute<TableAttribute, _>(tableType, [ table.Name ], [ "Schema", box table.Schema ])
 
-                    let tableType = ProvidedTypeDefinition(tableName , baseType = Some typeof<obj>, IsErased = false)
-
-                    do 
+                    do //Tables
                         let ctor = ProvidedConstructor([], InvokeCode = fun _ -> <@@ () @@>)
                         ctor.BaseConstructorCall <- fun args -> typeof<obj>.GetConstructor([||]), args
                         tableType.AddMember ctor
@@ -158,32 +194,42 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
                     do 
                         tableType.AddMembersDelayed <| fun() -> 
                             [
-                                for name, clrType in schema.GetColumns(tableName) do
-                                    yield! getAutoProperty(name, clrType)
-
-                                if not suppressForeignKeyProperties
-                                then 
-                                    for fkName, parent in schema.GetForeignKeys(tableName) do   
-                                        let parent: ProvidedTypeDefinition = downcast dbConTextType.GetNestedType( parent) 
-                                        yield! getAutoProperty(fkName, parent)
-                                    
-                                        parent.AddMembersDelayed <| fun () -> 
-                                            let collectionType = ProvidedTypeBuilder.MakeGenericType(typedefof<_ List>, [ tableType ])
-                                            let table = tableName.Split('.').[1]
-                                            getAutoProperty(fkName, collectionType)
+                                use conn = new SqlConnection( connectionString)
+                                conn.Open()
+                                
+                                for c in conn.GetColumns( table) do
+                                    let name = c.Name
+                                    yield! getAutoPropertyAsList( c.Name, c.ClrType)
+//
+//                                if not suppressForeignKeyProperties
+//                                then 
+//                                    for fk in conn.GetForeignKeys( table) do   
+//                                        let parent: ProvidedTypeDefinition = downcast dbConTextType.GetNestedType( fk.Parent.TwoPartName) 
+//                                        let prop, field = ProvidedProperty.Auto( fk.Name, parent)
+//                                        let columns = fk.Columns |> String.concat ","
+//                                        addCustomAttribute<ForeignKeyAttribute, _>(prop, [ columns ], [])
+//                                        addCustomAttribute<InversePropertyAttribute, _>(prop, [ table.Name ], [])
+//                                        
+//                                        yield prop :> _
+//                                        yield field :> _
+//                                    
+//                                        parent.AddMembersDelayed <| fun () -> 
+//                                            let collectionType = ProvidedTypeBuilder.MakeGenericType(typedefof<_ List>, [ tableType ])
+//                                            let prop, field = ProvidedProperty.Auto( table.Name, collectionType)
+//                                            [ prop :> MemberInfo; field :> _ ]
                             ]
 
                     yield tableType
             ]
             
             do  
-                ProvidedAssembly.GetTemp().AddTypes entityTypes 
+                addToProvidedTempAssembly entityTypes 
 
             let props = [
                 for e in entityTypes do
                     let name = if pluralize then e.Name.Pluralize() else e.Name
                     let t = ProvidedTypeBuilder.MakeGenericType( typedefof<_ DbSet>, [ e ])
-                    yield! getAutoProperty(name, t)
+                    yield! getAutoPropertyAsList( name, t)
             ]
 
             [ for x in entityTypes -> x :> MemberInfo ] @ props

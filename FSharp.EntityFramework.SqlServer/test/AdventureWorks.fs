@@ -1,4 +1,4 @@
-﻿module Basic
+﻿module AdventureWorks
 
 open System
 open Xunit

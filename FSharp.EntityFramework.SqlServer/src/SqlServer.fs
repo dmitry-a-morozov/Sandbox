@@ -1,5 +1,5 @@
 ﻿[<AutoOpen>]
-module FSharp.Data.Entity.Internals.InformationSchema
+module FSharp.Data.Entity.SqlServer.DesignTime
 
 open System
 open System.Data.SqlClient
@@ -8,37 +8,114 @@ open Microsoft.FSharp.Quotations
 open Microsoft.Data.Entity
 open ProviderImplementation.ProvidedTypes
 
-type internal ForeignKey = {
+let typeMapping = 
+    dict [
+        // exact numerics
+        "bigint", lazy Type.GetType "System.Int64"
+        "bit", lazy Type.GetType "System.Boolean" 
+        "decimal", lazy Type.GetType "System.Decimal" 
+        "int", lazy Type.GetType "System.Int32" 
+        "money", lazy Type.GetType "System.Decimal" 
+        "numeric", lazy Type.GetType "System.Decimal" 
+        "smallint", lazy Type.GetType "System.Int16" 
+        "smallmoney", lazy Type.GetType "System.Decimal" 
+        "tinyint", lazy Type.GetType "System.Byte" 
+
+        // approximate numerics
+        "float", lazy Type.GetType "System.Double" // This is correct. SQL Server 'float' type maps to double
+        "real", lazy Type.GetType "System.Single"
+
+        // date and time
+        "date", lazy Type.GetType "System.DateTime"
+        "datetime", lazy Type.GetType "System.DateTime"
+        "datetime2", lazy Type.GetType "System.DateTime"
+        "datetimeoffset", lazy Type.GetType "System.DateTimeOffset"
+        "smalldatetime", lazy Type.GetType "System.DateTime"
+        "time", lazy Type.GetType "System.TimeSpan"
+
+        // character strings
+        "char", lazy Type.GetType "System.String"
+        "text", lazy Type.GetType "System.String"
+        "varchar", lazy Type.GetType "System.String"
+
+        // unicode character strings
+        "nchar", lazy Type.GetType "System.String"
+        "ntext", lazy Type.GetType "System.String"
+        "nvarchar", lazy Type.GetType "System.String"
+        "sysname", lazy Type.GetType "System.String"
+
+        // binary
+        "binary", lazy Type.GetType "System.Byte[]" 
+        "image", lazy Type.GetType "System.Byte[]" 
+        "varbinary", lazy Type.GetType "System.Byte[]" 
+
+        //spatial
+        "geography", lazy Type.GetType("Microsoft.SqlServer.Types.SqlGeography, Microsoft.SqlServer.Types", throwOnError = true)
+        "geometry", lazy Type.GetType("Microsoft.SqlServer.Types.SqlGeometry, Microsoft.SqlServer.Types", throwOnError = true) 
+
+        //other
+        "hierarchyid", lazy Type.GetType("Microsoft.SqlServer.Types.SqlHierarchyId, Microsoft.SqlServer.Types", throwOnError = true) 
+        "sql_variant", lazy Type.GetType "System.Object" 
+        "timestamp", lazy Type.GetType "System.Byte[]"  // note: rowversion is a synonym but SQL Server stores the data type as 'timestamp'
+        "uniqueidentifier", lazy Type.GetType "System.Guid" 
+        "xml", lazy Type.GetType "System.String"
+
+        //TODO 
+        //"cursor", typeof<TODO>
+        //"table", typeof<TODO>
+    ]
+
+type Table = {
+    Schema: string
     Name: string
-    //Ordinal: int
-    Column: string
-    ParentTableSchema: string
-    ParentTable: string
-    ParentTableColumn: string
+}   
+    with
+    member this.TwoPartName = sprintf "%s.%s" this.Schema this.Name
+
+type Column = {
+    Name: string
+    DataType: string
+    IsNullable: bool
+    IsIdentity: bool
+    IsComputed: bool
+    IsPartOfPrimaryKey: bool
+    DefaultValue: string
+}   
+    with
+    member this.ClrType = 
+        let t = typeMapping.[this.DataType].Value
+        if this.IsNullable && t.IsValueType
+        then ProvidedTypeBuilder.MakeGenericType(typedefof<_ Nullable>, [ t ])
+        else t
+
+type ForeignKey = {
+    Name: string
+    Columns: string[]
+    Parent: Table 
 }
 
-type internal IInformationSchema = 
-    abstract GetTables: unit -> string[] 
-    abstract GetColumns: tableName: string -> (string * Type)[]
-    abstract GetForeignKeys : tableName: string -> (string * string)[]
-    abstract ModelConfiguration: Expr<string[] * ModelBuilder -> unit>
+let primaryKeysConfiguration (primaryKeyColumns: (string * string)[]) (entityTypeNames: string[], modelBuilder: ModelBuilder) = 
+    let pkByTable = Map.ofArray primaryKeyColumns
+    for name in entityTypeNames do
+        let e = modelBuilder.Entity(name)
+        let relational = e.Metadata.Relational()
+        sprintf "%s.%s" relational.Schema relational.TableName
+        |> pkByTable.TryFind 
+        |> Option.iter (fun pkColumns ->
+            e.HasKey( propertyNames = pkColumns.Split '\t') |> ignore
+        )
 
-//type Column = {
-//    Name: string
-//    DbTypeName: Type
-//    IsNullable: bool
-//    IsIdentity: bool
-//    IsReadOnly: bool
-//    IsPartOfPrimaryKey: bool
-//    DefaultValue: obj option
-//}
+type SqlDataReader with
+    member this.TryGetValue(name: string) = 
+        let value = this.[name] 
+        if Convert.IsDBNull value then None else Some(unbox<'a> value)
 
-
+let private (?) (row: SqlDataReader) (name: string) = unbox row.[name]
 
 type SqlConnection with 
     member internal this.Execute(query, ?parameters) = 
+        assert(this.State = ConnectionState.Open)
         seq {
-            assert(this.State = ConnectionState.Open)
             use cmd = new SqlCommand(query, this)
 
             cmd.Parameters.AddRange [|
@@ -52,164 +129,115 @@ type SqlConnection with
                 yield cursor
         }
 
-type SqlDataReader with
-    member internal this.TryGetValue(name: string) = 
-        let value = this.[name] 
-        if Convert.IsDBNull value then None else Some(unbox<'a> value)
+    member internal this.GetTables() = 
+        let query = "
+            SELECT TABLE_SCHEMA, TABLE_NAME
+            FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_TYPE = 'BASE TABLE'
+        "
+        this.Execute( query) 
+        |> Seq.map ( fun x -> { Schema = x ? TABLE_SCHEMA; Name = x ? TABLE_NAME }) 
+        |> Seq.toArray
 
-let tablesConfiguration (entityTypeNames: string[], modelBuilder: ModelBuilder) = 
-    for name in entityTypeNames do
-        let schema, table = 
-            let table2PartName = name.Split('+') |> Array.last
-            let xs = table2PartName.Split('.')
-            xs.[0], xs.[1]        
-
-        modelBuilder.Entity(name).ToTable(table, schema) |> ignore
-
-let primaryKeysConfiguration (primaryKeyColumns: (string * string)[]) (entityTypeNames: string[], modelBuilder: ModelBuilder) = 
-    let pkByTable = Map.ofArray primaryKeyColumns
-    for name in entityTypeNames do
-        let e = modelBuilder.Entity(name)
-        let relational = e.Metadata.Relational()
-        sprintf "%s.%s" relational.Schema relational.TableName
-        |> pkByTable.TryFind 
-        |> Option.iter (fun pkColumns ->
-            e.HasKey( propertyNames = pkColumns.Split '\t') |> ignore
-        )
-
-let internal getSqlServerSchema connectionString = 
-    
-    let (?) (row: SqlDataReader) (name: string) = unbox row.[name]
-    
-    let openConnection() = 
-        let x = new SqlConnection(connectionString)
-        x.Open()
-        x
-
-    let typeMappings = 
-        lazy dict [|
-            use conn = openConnection()
-            for x in conn.GetSchema("DataTypes").Rows do
-                let typeName = string x.["TypeName"]
-                let sqlEngineTypeName, clrTypeName = 
-                    match typeName.Split([|','|], 2) with
-                    | [| "Microsoft.SqlServer.Types.SqlHierarchyId"; _ |] -> "hierarchyid", typeName
-                    | [| "Microsoft.SqlServer.Types.SqlGeometry"; _ |] -> "geometry", typeName
-                    | [| "Microsoft.SqlServer.Types.SqlGeography"; _ |] -> "geography", typeName
-                    | [| "tinyint" |] -> typeName, typeof<byte>.FullName
-                    | _ -> typeName, string x.["DataType"]
-                yield sqlEngineTypeName, clrTypeName
-        |]
-
-    let getAllColumns() = 
-        let getColumnsQuery = "
-            SELECT 
-	            schemas.name + '.' + tables.name AS table_name
-	            ,columns.name AS column_name
-                ,is_nullable
-	            ,is_identity
-	            ,is_computed
-	            ,max_length
-	            ,default_constraint = ISNULL( OBJECT_DEFINITION(columns.default_object_id), '')
-	            ,is_part_of_primary_key = CASE WHEN index_columns.object_id IS NULL THEN 0 ELSE 1 END
-            FROM
-	            sys.schemas  
-	            JOIN sys.tables ON schemas.schema_id = tables.schema_id
-	            JOIN sys.columns ON columns.object_id = tables.object_id
-	            LEFT JOIN sys.indexes ON 
-		            tables.object_id = indexes.object_id 
-		            AND indexes.is_primary_key = 1
-	            LEFT JOIN sys.index_columns ON 
-		            index_columns.object_id = tables.object_id 
-		            AND index_columns.index_id = indexes.index_id 
-		            AND columns.column_id = index_columns.column_id
-        " 
-        use conn = openConnection()
-        conn.Execute( getColumnsQuery)
-        |> Seq.map( fun x ->
-            x ? table_name, 
-            x ? column_name, 
-            x ? is_part_of_primary_key = 1, 
-            (x ? is_nullable, x ? is_identity, x ? max_length, x ? is_computed, x ? default_constraint)
+    member this.GetColumns(table: Table) = 
+        let query = 
+            sprintf "
+                SELECT 
+	                columns.name
+					,types.name AS type_name
+                    ,columns.is_nullable
+	                ,columns.is_identity
+	                ,columns.is_computed
+	                ,columns.max_length
+	                ,default_constraint = ISNULL( OBJECT_DEFINITION(columns.default_object_id), '')
+	                ,is_part_of_primary_key = CASE WHEN index_columns.object_id IS NULL THEN 0 ELSE 1 END
+                FROM
+	                sys.schemas  
+	                JOIN sys.tables ON schemas.schema_id = tables.schema_id
+	                JOIN sys.columns ON columns.object_id = tables.object_id
+	                JOIN sys.types ON columns.system_type_id = types.system_type_id 
+	                	AND ((types.is_assembly_type = 1 AND columns.user_type_id = types.user_type_id) 
+	                		OR columns.system_type_id = types.user_type_id)
+	                LEFT JOIN sys.indexes ON 
+		                tables.object_id = indexes.object_id 
+		                AND indexes.is_primary_key = 1
+	                LEFT JOIN sys.index_columns ON 
+		                index_columns.object_id = tables.object_id 
+		                AND index_columns.index_id = indexes.index_id 
+		                AND columns.column_id = index_columns.column_id
+                WHERE
+                    schemas.name = '%s' AND tables.name = '%s'
+                ORDER BY 
+                    columns.column_id
+            " table.Schema table.Name
+        let xs = this.Execute( query)
+        
+        xs
+        |> Seq.map( fun x -> 
+            {
+                Name = x ? name
+                DataType = x ? type_name
+                IsNullable = x ? is_nullable
+                IsIdentity = x ? is_identity
+                IsComputed = x ? is_computed 
+                IsPartOfPrimaryKey = x ? is_part_of_primary_key = 1
+                DefaultValue = x ? default_constraint
+            }
         )
         |> Seq.toArray
 
-    let getAllForeignKeys() =
-        ()
+    member this.GetForeignKeys( table: Table) = 
+        let query = "
+            SELECT 
+	            FK.name AS Name
+				,columns.name AS ColumnName
+	            ,S.name AS ParentSchema
+                ,t.name AS ParentName
+            FROM sys.foreign_keys AS FK
+	            JOIN sys.foreign_key_columns AS FKC ON FK.object_id = FKC.constraint_object_id
+	            JOIN sys.columns  ON 
+                    FKC.parent_column_id = columns.column_id
+		            AND FKC.parent_object_id = columns.object_id
+				JOIN sys.tables AS T ON FKC.parent_object_id = T.object_id
+				JOIN sys.schemas AS S ON T.schema_id = S.schema_id
+            WHERE 
+                FK.parent_object_id = OBJECT_ID( @tableName)
+			ORDER BY 
+				FKC.constraint_column_id
+        "
 
-    { new IInformationSchema with
-        member __.GetTables() = [|
-            let query = "
-                SELECT TABLE_SCHEMA, TABLE_NAME
-                FROM INFORMATION_SCHEMA.TABLES
-                WHERE TABLE_TYPE = 'BASE TABLE'
-            "
-            use conn = openConnection()
-            for x in conn.Execute(query) do
-                yield sprintf "%s.%s" x ? TABLE_SCHEMA x ? TABLE_NAME
-        |]
+        this.Execute( query, [ "@tableName", table.TwoPartName ])
+        |> Seq.map(fun x -> (x ? Name, x ? ParentSchema, x ? ParentName), x ? ColumnName)
+        |> Seq.groupBy fst
+        |> Seq.map (fun ((name, parentSchema, parentName), xs) -> 
+            { 
+                Name = name
+                Columns = [| for _, columnName in xs -> columnName |]
+                Parent = { Schema = parentSchema; Name = parentName }; 
+            }
+        )
+        |> Seq.toArray
 
-        member __.GetColumns(tableName) = [|
-            let query = 
-                sprintf "
-                    SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE 
-                    FROM INFORMATION_SCHEMA.COLUMNS
-                    WHERE TABLE_SCHEMA + '.' + TABLE_NAME = '%s'
-                    ORDER BY ORDINAL_POSITION
-                " tableName
-            use conn = openConnection()
-            for x in conn.Execute(query) do
-                let name = x ? COLUMN_NAME
-                let clrTypeIncludingNullability = 
-                    let typename = x ? DATA_TYPE
-                    let t = Type.GetType( typeMappings.Value.[typename], throwOnError = true)
-                    if x ? IS_NULLABLE = "YES" && t.IsValueType
-                    then ProvidedTypeBuilder.MakeGenericType(typedefof<_ Nullable>, [ t ])
-                    else t
-
-                yield name, clrTypeIncludingNullability
-        |]            
-
-        member __.ModelConfiguration = 
-            let columns = getAllColumns() |> Seq.toArray
-
-            let primaryKeysByTable = 
-                let elements =  
-                    query {
-                        for (tableName: string), columnName, isPartOfPrimaryKey, _ in columns do
-                        where isPartOfPrimaryKey
-                        groupValBy columnName tableName into g
-                        let table = Expr.Value( g.Key)
-                        let pkColumns = Expr.Value( String.concat "\t" g)
-                        select (Expr.NewTuple [ table; pkColumns ])
-                    }
-                    |> Seq.toList
-
-                Expr.NewArray(typeof<string * string>, elements)
+        member __.FluentAPIModelConfiguration: Expr<Type[] * ModelBuilder -> unit> = 
+//            let columns = getAllColumns() 
+//
+//            let primaryKeysByTable = 
+//                let elements =  
+//                    query {
+//                        for c in columns do
+//                        where c.IsPartOfPrimaryKey
+//                        groupValBy c.Name columnName tableName into g
+//                        let table = Expr.Value( g.Key)
+//                        let pkColumns = Expr.Value( String.concat "\t" g)
+//                        select (Expr.NewTuple [ table; pkColumns ])
+//                    }
+//                    |> Seq.toList
+//
+//                Expr.NewArray(typeof<string * string>, elements)
 
             <@ 
                 fun (entityNames, modelBuilder) ->
-                    tablesConfiguration(entityNames, modelBuilder)
-                    primaryKeysConfiguration %%primaryKeysByTable (entityNames, modelBuilder)
+                    ()
+                    //primaryKeysConfiguration %%primaryKeysByTable (entityNames, modelBuilder)
             @>
 
-        member __.GetForeignKeys( tableName) = 
-            let query = 
-                "
-                    SELECT 
-	                    FK.name 
-	                    ,OBJECT_SCHEMA_NAME(Parent.object_id) + '.'	+ OBJECT_NAME(Parent.object_id) 
-                    FROM sys.foreign_keys AS FK
-	                    JOIN sys.foreign_key_columns AS FKC ON FK.object_id = FKC.constraint_object_id
-	                    JOIN sys.columns AS Parent ON 
-                            FKC.referenced_column_id = Parent.column_id
-		                    AND FKC.referenced_object_id = Parent.object_id
-                    WHERE 
-                        FK.parent_object_id = OBJECT_ID( @tableName)
-                "
-            use conn = openConnection()
-            conn.Execute( query, [ "@tableName", tableName ])
-            |> Seq.map(fun x -> x.GetString(0), x.GetString(1))
-            |> Seq.distinct
-            |> Seq.toArray
-    }
