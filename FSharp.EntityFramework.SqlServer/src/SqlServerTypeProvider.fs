@@ -156,11 +156,27 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
             impl.InvokeCode <- fun args -> 
                 use conn = new SqlConnection( connectionString)
                 conn.Open()
-                let defaultConfiguration = conn.FluentAPIModelConfiguration
+                
+                let pks = 
+                    let elements = [ 
+                        for pk in conn.GetAllPrimaryKeys() do 
+                            let table = Expr.Value( pk.Table.TwoPartName)
+                            let columns = Expr.NewArray( typeof<string>, [ for col in pk.Columns -> Expr.Value( col) ])
+                            yield Expr.NewTuple [ table; columns ] 
+                    ]
+                    Expr.NewArray(typeof<string * string[]>, elements)
+                    
+                let defaultConfiguration = 
+                    <@ 
+                        fun (entityNames, modelBuilder) ->
+                            Runtime.primaryKeysConfiguration %%pks (entityNames, modelBuilder)
+                    @>
+
                 <@@ 
                     let modelBuilder: ModelBuilder = %%args.[1]
                     let dbContext: DbContext = %%Expr.Coerce(args.[0], typeof<DbContext>)
-                    let entityTypes = dbContext.GetType().GetNestedTypes() |> Array.filter (fun t -> t.IsDefined(typeof<TableAttribute>))
+                    let entityTypes = 
+                        dbContext.GetType().GetNestedTypes() |> Array.filter (fun t -> t.IsDefined(typeof<TableAttribute>))
                     %defaultConfiguration <| (entityTypes, modelBuilder)
                     let modelCreating = %%Expr.FieldGet(args.[0], field)
                     if box modelCreating <> null
@@ -181,7 +197,7 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
             let entityTypes = [
 
                 for table in conn.GetTables() do   
-                    
+                   
                     let twoPartTableName = table.TwoPartName
                     let tableType = ProvidedTypeDefinition( twoPartTableName, baseType = Some typeof<obj>, IsErased = false)
                     addCustomAttribute<TableAttribute, _>(tableType, [ table.Name ], [ "Schema", box table.Schema ])
@@ -197,9 +213,15 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
                                 use conn = new SqlConnection( connectionString)
                                 conn.Open()
                                 
-                                for c in conn.GetColumns( table) do
-                                    let name = c.Name
-                                    yield! getAutoPropertyAsList( c.Name, c.ClrType)
+                                let unsupported = set [ "hierarchyid"; "sql_variant"; "geography"; "geometry" ]
+
+                                for col in conn.GetColumns( table) do
+                                    if not(unsupported.Contains col.DataType)
+                                    then 
+                                        let prop, field  = getAutoProperty( col.Name, col.ClrType)
+                                        yield prop :> MemberInfo
+                                        yield upcast field
+
 //
 //                                if not suppressForeignKeyProperties
 //                                then 

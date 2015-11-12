@@ -60,7 +60,8 @@
     <Compile Include="ProvidedTypes.fsi" />
     <Compile Include="ProvidedTypes.fs" />
     <Compile Include="DebugProvidedTypes.fs" />
-    <Compile Include="SqlServer.fs" />
+    <Compile Include="InformationSchema.fs" />
+    <Compile Include="Runtime.fs" />
     <Compile Include="SqlServerTypeProvider.fs" />
     <Content Include="packages.config" />
     <Content Include="app.config" />

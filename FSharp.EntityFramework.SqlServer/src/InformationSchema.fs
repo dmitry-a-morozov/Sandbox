@@ -1,11 +1,9 @@
 ﻿[<AutoOpen>]
-module FSharp.Data.Entity.SqlServer.DesignTime
+module internal FSharp.Data.Entity.SqlServer.InformationSchema
 
 open System
 open System.Data.SqlClient
 open System.Data
-open Microsoft.FSharp.Quotations
-open Microsoft.Data.Entity
 open ProviderImplementation.ProvidedTypes
 
 let typeMapping = 
@@ -56,6 +54,7 @@ let typeMapping =
         //other
         "hierarchyid", lazy Type.GetType("Microsoft.SqlServer.Types.SqlHierarchyId, Microsoft.SqlServer.Types", throwOnError = true) 
         "sql_variant", lazy Type.GetType "System.Object" 
+
         "timestamp", lazy Type.GetType "System.Byte[]"  // note: rowversion is a synonym but SQL Server stores the data type as 'timestamp'
         "uniqueidentifier", lazy Type.GetType "System.Guid" 
         "xml", lazy Type.GetType "System.String"
@@ -94,16 +93,11 @@ type ForeignKey = {
     Parent: Table 
 }
 
-let primaryKeysConfiguration (primaryKeyColumns: (string * string)[]) (entityTypeNames: string[], modelBuilder: ModelBuilder) = 
-    let pkByTable = Map.ofArray primaryKeyColumns
-    for name in entityTypeNames do
-        let e = modelBuilder.Entity(name)
-        let relational = e.Metadata.Relational()
-        sprintf "%s.%s" relational.Schema relational.TableName
-        |> pkByTable.TryFind 
-        |> Option.iter (fun pkColumns ->
-            e.HasKey( propertyNames = pkColumns.Split '\t') |> ignore
-        )
+type PrimaryKey = {
+    Name: string
+    Table: Table
+    Columns: string[] 
+}
 
 type SqlDataReader with
     member this.TryGetValue(name: string) = 
@@ -113,7 +107,7 @@ type SqlDataReader with
 let private (?) (row: SqlDataReader) (name: string) = unbox row.[name]
 
 type SqlConnection with 
-    member internal this.Execute(query, ?parameters) = 
+    member this.Execute(query, ?parameters) = 
         assert(this.State = ConnectionState.Open)
         seq {
             use cmd = new SqlCommand(query, this)
@@ -129,11 +123,24 @@ type SqlConnection with
                 yield cursor
         }
 
-    member internal this.GetTables() = 
+    member this.GetTables() = 
         let query = "
             SELECT TABLE_SCHEMA, TABLE_NAME
-            FROM INFORMATION_SCHEMA.TABLES
+            FROM INFORMATION_SCHEMA.TABLES AS X
             WHERE TABLE_TYPE = 'BASE TABLE'
+            EXCEPT 
+            SELECT DISTINCT X.TABLE_SCHEMA, X.TABLE_NAME
+            FROM 
+	            INFORMATION_SCHEMA.TABLE_CONSTRAINTS AS X
+	            JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS Y ON 
+		            X.CONSTRAINT_TYPE = 'PRIMARY KEY'
+		            AND X.CONSTRAINT_SCHEMA = Y.CONSTRAINT_SCHEMA 
+		            AND X.CONSTRAINT_NAME = Y.CONSTRAINT_NAME
+	            JOIN INFORMATION_SCHEMA.COLUMNS AS Z ON
+		            Y.TABLE_SCHEMA = Z.TABLE_SCHEMA
+		            AND Y.TABLE_NAME = Z.TABLE_NAME
+		            AND Y.COLUMN_NAME = Z.COLUMN_NAME
+            WHERE Z.DATA_TYPE IN ('geography', 'geometry', 'hierarchyid')
         "
         this.Execute( query) 
         |> Seq.map ( fun x -> { Schema = x ? TABLE_SCHEMA; Name = x ? TABLE_NAME }) 
@@ -218,26 +225,38 @@ type SqlConnection with
         )
         |> Seq.toArray
 
-        member __.FluentAPIModelConfiguration: Expr<Type[] * ModelBuilder -> unit> = 
-//            let columns = getAllColumns() 
-//
-//            let primaryKeysByTable = 
-//                let elements =  
-//                    query {
-//                        for c in columns do
-//                        where c.IsPartOfPrimaryKey
-//                        groupValBy c.Name columnName tableName into g
-//                        let table = Expr.Value( g.Key)
-//                        let pkColumns = Expr.Value( String.concat "\t" g)
-//                        select (Expr.NewTuple [ table; pkColumns ])
-//                    }
-//                    |> Seq.toList
-//
-//                Expr.NewArray(typeof<string * string>, elements)
+    member this.GetAllPrimaryKeys() = 
+        let query = "
+            SELECT 
+	            indexes.name AS Name
+	            ,schemas.name AS TableSchema
+	            ,tables.name AS TableName
+	            ,columns.name AS ColumnName
+	            ,index_columns.key_ordinal As ColumnKeyOrdinal
+            FROM
+	            sys.indexes 
+	            JOIN sys.tables ON tables.object_id = indexes.object_id 
+	            JOIN sys.schemas ON schemas.schema_id = tables.schema_id
+	            JOIN sys.index_columns ON 
+		            index_columns.object_id = tables.object_id 
+		            AND index_columns.index_id = indexes.index_id 
+	            JOIN sys.columns ON 
+		            columns.object_id = index_columns.object_id 
+		            AND columns.column_id = index_columns.column_id
+            WHERE
+	            indexes.is_primary_key = 1
+            --ORDER BY TableSchema, TableName, KeyOrdinal
+        "
 
-            <@ 
-                fun (entityNames, modelBuilder) ->
-                    ()
-                    //primaryKeysConfiguration %%primaryKeysByTable (entityNames, modelBuilder)
-            @>
+        this.Execute( query)
+        |> Seq.map(fun x -> (x ? Name, x ? TableSchema, x ? TableName), x ? ColumnName)
+        |> Seq.groupBy fst
+        |> Seq.map (fun ((name, tableSchema, tableName), xs) -> 
+            { 
+                Name = name
+                Table = { Schema = tableSchema; Name = tableName }
+                Columns = [| for _, columnName in xs -> columnName |]
+            }
+        )
+        |> Seq.toArray
 
