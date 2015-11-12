@@ -219,6 +219,10 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
                                     if not(unsupported.Contains col.DataType)
                                     then 
                                         let prop, field  = getAutoProperty( col.Name, col.ClrType)
+                                        if col.DataType = "timestamp"
+                                        then 
+                                            addCustomAttribute<DatabaseGeneratedAttribute, _>(prop, [ DatabaseGeneratedOption.Computed ], [])
+
                                         yield prop :> MemberInfo
                                         yield upcast field
 

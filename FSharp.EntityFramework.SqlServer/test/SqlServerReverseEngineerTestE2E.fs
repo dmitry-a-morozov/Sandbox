@@ -56,8 +56,7 @@ let AllDataTypes() =
     for x, y in Array.zip expected actual do
         Assert.Equal<_>(x, y, LanguagePrimitives.FastGenericEqualityComparer)
 
-    //let entityType = db.Model.GetEntityType( typeof<DB.``dbo.AllDataTypes``>)
-    let entityType = db.Model.EntityTypes |> Seq.find (fun x -> x.ClrType = typeof<DB.``dbo.AllDataTypes``>)
-    ()
-//    let p = entityType.GetProperty("timestampColumn")
-//    Assert.Equal(ValueGenerated.OnAddOrUpdate, p.ValueGenerated)
+    let entityType = db.Model.GetEntityType( typeof<DB.``dbo.AllDataTypes``>)
+
+    let p = entityType.GetProperty("timestampColumn")
+    Assert.Equal(ValueGenerated.OnAddOrUpdate, p.ValueGenerated)
