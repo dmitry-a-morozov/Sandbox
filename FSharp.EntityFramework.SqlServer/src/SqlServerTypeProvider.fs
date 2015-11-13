@@ -223,6 +223,17 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
                                         then 
                                             addCustomAttribute<DatabaseGeneratedAttribute, _>(prop, [ DatabaseGeneratedOption.Computed ], [])
 
+                                        let maybeMaxLength =
+                                            match col.DataType with
+                                            | "binary" | "varbinary" 
+                                            | "char" | "text" | "varchar" -> Some col.MaxLength
+                                            | "nchar" | "ntext" | "nvarchar" | "sysname"  -> Some( col.MaxLength / 2)
+                                            | _ -> None
+                                        
+                                        maybeMaxLength |> Option.iter (fun maxLength ->
+                                            addCustomAttribute<MaxLengthAttribute, _>(prop, [ maxLength ], [])
+                                        )
+
                                         yield prop :> MemberInfo
                                         yield upcast field
 

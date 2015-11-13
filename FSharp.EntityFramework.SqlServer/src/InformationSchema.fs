@@ -64,6 +64,8 @@ let typeMapping =
         //"table", typeof<TODO>
     ]
 
+let unicodeTypes = set [ "nchar"; "ntext"; "nvarchar"; "sysname"]
+
 type Table = {
     Schema: string
     Name: string
@@ -77,6 +79,7 @@ type Column = {
     IsNullable: bool
     IsIdentity: bool
     IsComputed: bool
+    MaxLength: int    
     IsPartOfPrimaryKey: bool
     DefaultValue: string
 }   
@@ -187,6 +190,7 @@ type SqlConnection with
                 IsNullable = x ? is_nullable
                 IsIdentity = x ? is_identity
                 IsComputed = x ? is_computed 
+                MaxLength = int<int16> x ? max_length
                 IsPartOfPrimaryKey = x ? is_part_of_primary_key = 1
                 DefaultValue = x ? default_constraint
             }

@@ -1,4 +1,4 @@
-﻿module AllDataTypes
+﻿module SqlServerReverseEngineerTestE2E
 
 open System
 open Microsoft.SqlServer.Types
@@ -58,5 +58,15 @@ let AllDataTypes() =
 
     let entityType = db.Model.GetEntityType( typeof<DB.``dbo.AllDataTypes``>)
 
-    let p = entityType.GetProperty("timestampColumn")
-    Assert.Equal(ValueGenerated.OnAddOrUpdate, p.ValueGenerated)
+    Assert.Equal(
+        ValueGenerated.OnAddOrUpdate, 
+        entityType.GetProperty("timestampColumn").ValueGenerated
+    )
+
+    Assert.Equal(Nullable 1, entityType.GetProperty("binaryColumn").GetMaxLength()    )
+    Assert.Equal(Nullable 1, entityType.GetProperty("varbinaryColumn").GetMaxLength())
+
+    Assert.Equal(Nullable 1, entityType.GetProperty("charColumn").GetMaxLength())
+    Assert.Equal(Nullable 1, entityType.GetProperty("ncharColumn").GetMaxLength())
+    Assert.Equal(Nullable 1, entityType.GetProperty("nvarcharColumn").GetMaxLength())
+    Assert.Equal(Nullable 1, entityType.GetProperty("varcharColumn").GetMaxLength())
