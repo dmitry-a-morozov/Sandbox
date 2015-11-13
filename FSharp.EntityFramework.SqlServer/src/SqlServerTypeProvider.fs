@@ -61,6 +61,8 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
     let getAutoPropertyAsList(name, clrType): MemberInfo list = 
         let p, f = getAutoProperty(name, clrType)
         [ p; f ]
+                                
+    let unsupportedColumnTypes = set [ "hierarchyid"; "sql_variant"; "geography"; "geometry"; "xml" ]
 
     do
         addToProvidedTempAssembly [ providerType ]
@@ -213,12 +215,15 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
                                 use conn = new SqlConnection( connectionString)
                                 conn.Open()
                                 
-                                let unsupported = set [ "hierarchyid"; "sql_variant"; "geography"; "geometry" ]
-
                                 for col in conn.GetColumns( table) do
-                                    if not(unsupported.Contains col.DataType)
+                                    if not(unsupportedColumnTypes.Contains col.DataType)
                                     then 
                                         let prop, field  = getAutoProperty( col.Name, col.ClrType)
+
+                                        let requiredRefTypeColumn = not col.IsNullable && not col.ClrType.IsValueType
+                                        if requiredRefTypeColumn
+                                        then addCustomAttribute<RequiredAttribute, _>(prop, [], [])
+
                                         if col.DataType = "timestamp"
                                         then 
                                             addCustomAttribute<DatabaseGeneratedAttribute, _>(prop, [ DatabaseGeneratedOption.Computed ], [])

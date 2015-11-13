@@ -18,8 +18,10 @@ let AllDataTypes() =
         typeof<bool>, "bitColumn"
         typeof<string>, "charColumn"
         typeof<DateTime>, "dateColumn"
+        typeof<DateTime Nullable>, "datetime24Column"
         typeof<DateTime Nullable>, "datetime2Column"
         typeof<DateTime Nullable>, "datetimeColumn"
+        typeof<DateTimeOffset Nullable>, "datetimeoffset5Column"
         typeof<DateTimeOffset Nullable>, "datetimeoffsetColumn"
         typeof<decimal>, "decimalColumn"
         typeof<double>, "floatColumn"
@@ -39,19 +41,22 @@ let AllDataTypes() =
         typeof<decimal>, "smallmoneyColumn"
         //typeof<obj>, "sql_variantColumn"
         typeof<string>, "textColumn"
+        typeof<TimeSpan Nullable>, "time4Column"
         typeof<TimeSpan Nullable>, "timeColumn"
         typeof<byte[]>, "timestampColumn"
         typeof<byte>, "tinyintColumn"
         typeof<Guid Nullable>, "uniqueidentifierColumn"
         typeof<byte[]>, "varbinaryColumn"
         typeof<string>, "varcharColumn"
-        typeof<string>, "xmlColumn"
+        //typeof<string>, "xmlColumn"
     |]
 
     let actual =    
         typeof<DB.``dbo.AllDataTypes``>.GetProperties() 
         |> Array.map(fun p -> p.PropertyType, p.Name)
         |> Array.sortBy snd
+
+    Assert.Equal(expected.Length, actual.Length)
 
     for x, y in Array.zip expected actual do
         Assert.Equal<_>(x, y, LanguagePrimitives.FastGenericEqualityComparer)
@@ -70,3 +75,19 @@ let AllDataTypes() =
     Assert.Equal(Nullable 1, entityType.GetProperty("ncharColumn").GetMaxLength())
     Assert.Equal(Nullable 1, entityType.GetProperty("nvarcharColumn").GetMaxLength())
     Assert.Equal(Nullable 1, entityType.GetProperty("varcharColumn").GetMaxLength())
+
+[<Fact>]
+let OneToManyDependent() = 
+    let e = db.Model.GetEntityType( typeof<DB.``dbo.OneToManyDependent``>)
+    Assert.Equal<_ list>(
+        [ "OneToManyDependentID1"; "OneToManyDependentID2" ],
+        [ for p in e.GetPrimaryKey().Properties -> p.Name ]
+    )
+    Assert.Equal(Nullable 20, e.GetProperty("SomeDependentEndColumn").GetMaxLength())
+    Assert.False(e.GetProperty("SomeDependentEndColumn").IsNullable)
+    
+
+[<Fact>]
+let OneToOneFKToUniqueKeyDependent() = 
+    let e = db.Model.GetEntityType( typeof<DB.``dbo.OneToOneFKToUniqueKeyDependent``>)
+    ()
