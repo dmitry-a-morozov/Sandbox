@@ -202,8 +202,8 @@ type SqlConnection with
             SELECT 
 	            FK.name AS Name
 				,columns.name AS ColumnName
-	            ,S.name AS ParentSchema
-                ,t.name AS ParentName
+	            ,OBJECT_SCHEMA_NAME(FKC.referenced_object_id) AS ParentSchema
+                ,OBJECT_NAME(FKC.referenced_object_id) AS ParentName
             FROM sys.foreign_keys AS FK
 	            JOIN sys.foreign_key_columns AS FKC ON FK.object_id = FKC.constraint_object_id
 	            JOIN sys.columns  ON 
@@ -227,6 +227,7 @@ type SqlConnection with
                 Parent = { Schema = parentSchema; Name = parentName }; 
             }
         )
+        |> Seq.distinctBy (fun x -> x.Parent)
         |> Seq.toArray
 
     member this.GetAllPrimaryKeys() = 

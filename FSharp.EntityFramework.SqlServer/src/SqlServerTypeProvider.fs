@@ -242,23 +242,30 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
                                         yield prop :> MemberInfo
                                         yield upcast field
 
-//
-//                                if not suppressForeignKeyProperties
-//                                then 
-//                                    for fk in conn.GetForeignKeys( table) do   
-//                                        let parent: ProvidedTypeDefinition = downcast dbConTextType.GetNestedType( fk.Parent.TwoPartName) 
-//                                        let prop, field = ProvidedProperty.Auto( fk.Name, parent)
-//                                        let columns = fk.Columns |> String.concat ","
-//                                        addCustomAttribute<ForeignKeyAttribute, _>(prop, [ columns ], [])
-//                                        addCustomAttribute<InversePropertyAttribute, _>(prop, [ table.Name ], [])
-//                                        
-//                                        yield prop :> _
-//                                        yield field :> _
-//                                    
-//                                        parent.AddMembersDelayed <| fun () -> 
-//                                            let collectionType = ProvidedTypeBuilder.MakeGenericType(typedefof<_ List>, [ tableType ])
-//                                            let prop, field = ProvidedProperty.Auto( table.Name, collectionType)
-//                                            [ prop :> MemberInfo; field :> _ ]
+                                if not suppressForeignKeyProperties
+                                then 
+                                    for fk in conn.GetForeignKeys( table) do   
+                                        let parent: ProvidedTypeDefinition = downcast dbConTextType.GetNestedType( fk.Parent.TwoPartName) 
+                                        let prop, field = getAutoProperty( fk.Name, parent)
+                                        let columns = fk.Columns |> String.concat ","
+                                        addCustomAttribute<ForeignKeyAttribute, _>(prop, [ columns ], [])
+                                        addCustomAttribute<InversePropertyAttribute, _>(prop, [ table.Name ], [])
+                                        
+                                        yield prop :> _
+                                        yield field :> _
+                                    
+                                        parent.AddMembersDelayed <| fun () -> 
+                                            let collectionType = ProvidedTypeBuilder.MakeGenericType(typedefof<_ List>, [ tableType ])
+//                                            let backingField = ProvidedField(name.Camelize(), clrType)
+//                                            let property = ProvidedProperty(name, clrType)
+//                                            property.GetterCode <- fun args -> Expr.FieldGet( args.[0], backingField)
+//                                            property.SetterCode <- fun args -> Expr.FieldSet( args.[0], backingField, args.[1])
+//                                            property, backingField 
+                                            if parent.Name.EndsWith("HumanResources.EmployeeDepartmentHistory") then System.Diagnostics.Debugger.Break()
+                                            
+                                            let prop, field = getAutoProperty( table.Name, collectionType)
+                                            [ prop :> MemberInfo; field :> _ ]
+                                            //[]
                             ]
 
                     yield tableType

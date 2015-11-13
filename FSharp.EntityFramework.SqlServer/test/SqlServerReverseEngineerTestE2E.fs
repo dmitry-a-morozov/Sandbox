@@ -85,7 +85,11 @@ let OneToManyDependent() =
     )
     Assert.Equal(Nullable 20, e.GetProperty("SomeDependentEndColumn").GetMaxLength())
     Assert.False(e.GetProperty("SomeDependentEndColumn").IsNullable)
-    
+    let fk = e.GetForeignKeys() |> Seq.exactlyOne
+    Assert.Equal<string>(
+        "OneToManyDependentFK1,OneToManyDependentFK2",
+        fk.Properties |> Seq.map (fun p -> p.Name) |> String.concat ","
+    )
 
 [<Fact>]
 let OneToOneFKToUniqueKeyDependent() = 
