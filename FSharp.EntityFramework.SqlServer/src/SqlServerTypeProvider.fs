@@ -63,6 +63,13 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
         [ p; f ]
                                 
     let unsupportedColumnTypes = set [ "hierarchyid"; "sql_variant"; "geography"; "geometry"; "xml" ]
+    let hardToMapDatatypes = 
+        set [
+            "binary"; "image"; "timestamp"; "varbinary"
+            "char"; "nchar"; "ntext"; "text"; "varchar"
+            "money"; "decimal"; "numeric"; "smallmoney"
+            "date"; "smalldatetime"
+        ]
 
     do
         addToProvidedTempAssembly [ providerType ]
@@ -114,8 +121,6 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
                         ctor.BaseConstructorCall <- fun args -> baseCtor, args
                         yield ctor
                 ]
-
-        //use conn = new SqlConnection( connectionString)
 
         this.AddEntityTypesAndDataSets(dbContextType, connectionString, pluralize, suppressForeignKeyProperties)
 
@@ -238,6 +243,11 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
                                         maybeMaxLength |> Option.iter (fun maxLength ->
                                             addCustomAttribute<MaxLengthAttribute, _>(prop, [ maxLength ], [])
                                         )
+
+                                        if hardToMapDatatypes.Contains col.DataType
+                                        then 
+                                            addCustomAttribute<ColumnAttribute, _>(prop, [], [ "TypeName", box col.DataType ])
+                                            
 
                                         yield prop :> MemberInfo
                                         yield upcast field

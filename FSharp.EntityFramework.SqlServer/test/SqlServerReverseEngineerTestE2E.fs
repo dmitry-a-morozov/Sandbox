@@ -5,6 +5,7 @@ open Microsoft.SqlServer.Types
 open Xunit
 open FSharp.Data.Entity
 open Microsoft.Data.Entity.Metadata
+open Microsoft.Data.Entity
 
 type DB = SqlServer<"Data Source=.;Initial Catalog=SqlServerReverseEngineerTestE2E;Integrated Security=True">
 let db = new DB()
@@ -75,6 +76,30 @@ let AllDataTypes() =
     Assert.Equal(Nullable 1, entityType.GetProperty("ncharColumn").GetMaxLength())
     Assert.Equal(Nullable 1, entityType.GetProperty("nvarcharColumn").GetMaxLength())
     Assert.Equal(Nullable 1, entityType.GetProperty("varcharColumn").GetMaxLength())
+
+    Assert.Equal(Nullable 1, entityType.GetProperty("binaryColumn"). GetMaxLength())
+
+    Assert.Equal<string>("binary", entityType.GetProperty("binaryColumn").SqlServer().ColumnType)
+
+    Assert.Equal<string>("char", entityType.GetProperty("charColumn").SqlServer().ColumnType)
+    Assert.Equal<string>("date", entityType.GetProperty("dateColumn").SqlServer().ColumnType)
+    Assert.Equal<string>("image", entityType.GetProperty("imageColumn").SqlServer().ColumnType)
+    Assert.Equal<string>("money", entityType.GetProperty("moneyColumn").SqlServer().ColumnType)
+    Assert.Equal<string>("nchar", entityType.GetProperty("ncharColumn").SqlServer().ColumnType)
+    Assert.Equal<string>("ntext", entityType.GetProperty("ntextColumn").SqlServer().ColumnType)
+    Assert.Equal<string>("decimal", entityType.GetProperty("decimalColumn").SqlServer().ColumnType)
+    Assert.Equal<string>("numeric", entityType.GetProperty("numericColumn").SqlServer().ColumnType)
+    Assert.Equal<string>("smalldatetime", entityType.GetProperty("smalldatetimeColumn").SqlServer().ColumnType)
+    Assert.Equal<string>("smallmoney", entityType.GetProperty("smallmoneyColumn").SqlServer().ColumnType)
+    Assert.Equal<string>("text", entityType.GetProperty("textColumn").SqlServer().ColumnType)
+    Assert.Equal<string>("timestamp", entityType.GetProperty("timestampColumn").SqlServer().ColumnType)
+    Assert.Equal<string>("varbinary", entityType.GetProperty("varbinaryColumn").SqlServer().ColumnType)
+    Assert.Equal<string>("varchar", entityType.GetProperty("varcharColumn").SqlServer().ColumnType)
+
+//                entity.Property(e => e.datetime24Column).HasColumnType("datetime2(4)");
+//                entity.Property(e => e.datetimeColumn).HasColumnType("datetime");
+//                entity.Property(e => e.datetimeoffset5Column).HasColumnType("datetimeoffset(5)");
+//                entity.Property(e => e.time4Column).HasColumnType("time(4)");
 
 [<Fact>]
 let OneToManyDependent() = 

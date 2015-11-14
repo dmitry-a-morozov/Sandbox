@@ -131,7 +131,7 @@ type SqlConnection with
             SELECT TABLE_SCHEMA, TABLE_NAME
             FROM INFORMATION_SCHEMA.TABLES AS X
             WHERE TABLE_TYPE = 'BASE TABLE'
-            EXCEPT 
+            EXCEPT --tables containing unsuporrted column types as part of primary key
             SELECT DISTINCT X.TABLE_SCHEMA, X.TABLE_NAME
             FROM 
 	            INFORMATION_SCHEMA.TABLE_CONSTRAINTS AS X
@@ -143,7 +143,7 @@ type SqlConnection with
 		            Y.TABLE_SCHEMA = Z.TABLE_SCHEMA
 		            AND Y.TABLE_NAME = Z.TABLE_NAME
 		            AND Y.COLUMN_NAME = Z.COLUMN_NAME
-            WHERE Z.DATA_TYPE IN ('geography', 'geometry', 'hierarchyid')
+            WHERE Z.DATA_TYPE IN ('geography', 'geometry', 'hierarchyid', 'sql_variant', 'xml')
         "
         this.Execute( query) 
         |> Seq.map ( fun x -> { Schema = x ? TABLE_SCHEMA; Name = x ? TABLE_NAME }) 
