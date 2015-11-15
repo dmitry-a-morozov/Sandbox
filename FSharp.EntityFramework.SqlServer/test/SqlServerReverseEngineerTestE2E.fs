@@ -95,11 +95,11 @@ let AllDataTypes() =
     Assert.Equal<string>("timestamp", entityType.GetProperty("timestampColumn").SqlServer().ColumnType)
     Assert.Equal<string>("varbinary", entityType.GetProperty("varbinaryColumn").SqlServer().ColumnType)
     Assert.Equal<string>("varchar", entityType.GetProperty("varcharColumn").SqlServer().ColumnType)
-
-//                entity.Property(e => e.datetime24Column).HasColumnType("datetime2(4)");
-//                entity.Property(e => e.datetimeColumn).HasColumnType("datetime");
-//                entity.Property(e => e.datetimeoffset5Column).HasColumnType("datetimeoffset(5)");
-//                entity.Property(e => e.time4Column).HasColumnType("time(4)");
+//  types with explicit scale
+    Assert.Equal<string>("datetime2(4)", entityType.GetProperty("datetime24Column").SqlServer().ColumnType)
+    Assert.Equal<string>("datetime", entityType.GetProperty("datetimeColumn").SqlServer().ColumnType)
+    Assert.Equal<string>("datetimeoffset(5)", entityType.GetProperty("datetimeoffset5Column").SqlServer().ColumnType)
+    Assert.Equal<string>("time(4)", entityType.GetProperty("time4Column").SqlServer().ColumnType)
 
 [<Fact>]
 let OneToManyDependent() = 

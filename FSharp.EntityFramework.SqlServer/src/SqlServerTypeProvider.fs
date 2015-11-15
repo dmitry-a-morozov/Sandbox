@@ -68,8 +68,9 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
             "binary"; "image"; "timestamp"; "varbinary"
             "char"; "nchar"; "ntext"; "text"; "varchar"
             "money"; "decimal"; "numeric"; "smallmoney"
-            "date"; "smalldatetime"
+            "date"; "time"; "datetime2"; "datetimeoffset"; "datetime"; "smalldatetime"
         ]
+    let typesToSpecifyScale = set [ "time"; "datetime2"; "datetimeoffset" ]
 
     do
         addToProvidedTempAssembly [ providerType ]
@@ -246,9 +247,15 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
 
                                         if hardToMapDatatypes.Contains col.DataType
                                         then 
-                                            addCustomAttribute<ColumnAttribute, _>(prop, [], [ "TypeName", box col.DataType ])
+                                            let scale = 
+                                                match col.NonDefaultScale, col.DataType with
+                                                | Some x, "time" 
+                                                | Some x, "datetime2"
+                                                | Some x, "datetimeoffset" -> sprintf "(%i)" x
+                                                | _ -> ""
+                                            let typename = col.DataType + string scale 
+                                            addCustomAttribute<ColumnAttribute, _>(prop, [], [ "TypeName", box typename ])
                                             
-
                                         yield prop :> MemberInfo
                                         yield upcast field
 

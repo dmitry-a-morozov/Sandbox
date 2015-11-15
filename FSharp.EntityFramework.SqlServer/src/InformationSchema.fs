@@ -79,7 +79,8 @@ type Column = {
     IsNullable: bool
     IsIdentity: bool
     IsComputed: bool
-    MaxLength: int    
+    MaxLength: int
+    NonDefaultScale: int option    
     IsPartOfPrimaryKey: bool
     DefaultValue: string
 }   
@@ -159,6 +160,7 @@ type SqlConnection with
 	                ,columns.is_identity
 	                ,columns.is_computed
 	                ,columns.max_length
+	                ,CAST( NULLIF( columns.scale, types.scale) AS INT) AS scale
 	                ,default_constraint = ISNULL( OBJECT_DEFINITION(columns.default_object_id), '')
 	                ,is_part_of_primary_key = CASE WHEN index_columns.object_id IS NULL THEN 0 ELSE 1 END
                 FROM
@@ -191,6 +193,7 @@ type SqlConnection with
                 IsIdentity = x ? is_identity
                 IsComputed = x ? is_computed 
                 MaxLength = int<int16> x ? max_length
+                NonDefaultScale = x.TryGetValue("scale")
                 IsPartOfPrimaryKey = x ? is_part_of_primary_key = 1
                 DefaultValue = x ? default_constraint
             }
