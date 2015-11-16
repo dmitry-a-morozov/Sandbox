@@ -132,7 +132,9 @@ type SqlConnection with
             SELECT TABLE_SCHEMA, TABLE_NAME
             FROM INFORMATION_SCHEMA.TABLES AS X
             WHERE TABLE_TYPE = 'BASE TABLE'
+
             EXCEPT --tables containing unsuporrted column types as part of primary key
+
             SELECT DISTINCT X.TABLE_SCHEMA, X.TABLE_NAME
             FROM 
 	            INFORMATION_SCHEMA.TABLE_CONSTRAINTS AS X

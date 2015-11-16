@@ -115,6 +115,26 @@ let innerJoin() =
     
     Assert.Equal<_[]>(expected, actual)
 
+[<Fact>]
+let typedFromSql() =
+    let actual = 
+        db.``Sales.Customers``.FromSql(
+            "SELECT CustomerID, PersonID, StoreID, TerritoryID, AccountNumber, rowguid, ModifiedDate FROM Sales.Customer WHERE CustomerID <= {0}", 
+            2) 
+        |> Seq.toArray
+
+    let expected = 
+        query {
+            for x in db.``Sales.Customers`` do
+            where (x.CustomerID <= 2) 
+            select x
+        }
+        |> Seq.toArray
+
+    Assert.Equal<_ []>(expected, actual)
+
+   
+
 //open System.Linq
 //        
 //[<Fact>]

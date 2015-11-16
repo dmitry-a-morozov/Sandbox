@@ -273,16 +273,9 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
                                     
                                         parent.AddMembersDelayed <| fun () -> 
                                             let collectionType = ProvidedTypeBuilder.MakeGenericType(typedefof<_ List>, [ tableType ])
-//                                            let backingField = ProvidedField(name.Camelize(), clrType)
-//                                            let property = ProvidedProperty(name, clrType)
-//                                            property.GetterCode <- fun args -> Expr.FieldGet( args.[0], backingField)
-//                                            property.SetterCode <- fun args -> Expr.FieldSet( args.[0], backingField, args.[1])
-//                                            property, backingField 
-                                            if parent.Name.EndsWith("HumanResources.EmployeeDepartmentHistory") then System.Diagnostics.Debugger.Break()
-                                            
                                             let prop, field = getAutoProperty( table.Name, collectionType)
+                                            addCustomAttribute<InversePropertyAttribute, _>(prop, [ fk.Name ], [])
                                             [ prop :> MemberInfo; field :> _ ]
-                                            //[]
                             ]
 
                     yield tableType

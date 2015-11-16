@@ -101,20 +101,44 @@ let AllDataTypes() =
     Assert.Equal<string>("datetimeoffset(5)", entityType.GetProperty("datetimeoffset5Column").SqlServer().ColumnType)
     Assert.Equal<string>("time(4)", entityType.GetProperty("time4Column").SqlServer().ColumnType)
 
+let getPrimaryKeyColumns(e: IEntityType) = 
+    [ for p in e.GetPrimaryKey().Properties -> p.Name ]
+
+let getSingleForeightKeyColumns(e: IEntityType) = 
+    let fk = e.GetForeignKeys() |> Seq.exactlyOne
+    [ for p in fk.Properties -> p.Name ]
+
 [<Fact>]
 let OneToManyDependent() = 
     let e = db.Model.GetEntityType( typeof<DB.``dbo.OneToManyDependent``>)
     Assert.Equal<_ list>(
         [ "OneToManyDependentID1"; "OneToManyDependentID2" ],
-        [ for p in e.GetPrimaryKey().Properties -> p.Name ]
+        getPrimaryKeyColumns(e)
     )
     Assert.Equal(Nullable 20, e.GetProperty("SomeDependentEndColumn").GetMaxLength())
     Assert.False(e.GetProperty("SomeDependentEndColumn").IsNullable)
-    let fk = e.GetForeignKeys() |> Seq.exactlyOne
-    Assert.Equal<string>(
-        "OneToManyDependentFK1,OneToManyDependentFK2",
-        fk.Properties |> Seq.map (fun p -> p.Name) |> String.concat ","
+    let nav = e.GetNavigations() |> Seq.exactlyOne
+    Assert.Equal<_ list>(
+        [ "OneToManyDependentFK1"; "OneToManyDependentFK2" ],
+        [ for p in nav.ForeignKey.Properties -> p.Name ]
     )
+
+    let inverseNav = 
+        db.Model.GetEntityType( typeof<DB.``dbo.OneToManyPrincipal``>).GetNavigations() |> Seq.exactlyOne
+
+    Assert.Same(nav, inverseNav.FindInverse())
+
+[<Fact>]
+let OneToManyPrincipal() = 
+    let e = db.Model.GetEntityType( typeof<DB.``dbo.OneToManyPrincipal``>)
+    Assert.Equal<_ list>(
+        [ "OneToManyPrincipalID1"; "OneToManyPrincipalID2" ],
+        getPrimaryKeyColumns(e)
+    )
+
+    let other = e.GetProperty("Other")
+    Assert.Equal(Nullable 20, other.GetMaxLength())
+    Assert.False( other.IsNullable)
 
 [<Fact>]
 let OneToOneFKToUniqueKeyDependent() = 
