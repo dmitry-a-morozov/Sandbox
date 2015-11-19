@@ -1,13 +1,12 @@
 ﻿module AdventureWorks
 
 open System
+open System.Data.SqlClient
 open Xunit
+open Microsoft.Data.Entity
 open FSharp.Data.Entity
 
-//I want to call provided type DbContext not DbContextProvider
 type AdventureWorks = SqlServer<"Data Source=.;Initial Catalog=AdventureWorks2014;Integrated Security=True", Pluralize = true>
-//but compiler gets confused therefore following line should be after TP declaration
-open Microsoft.Data.Entity
 
 let db = new AdventureWorks()
 
@@ -116,16 +115,28 @@ let innerJoin() =
     Assert.Equal<_[]>(expected, actual)
 
 [<Fact>]
-let typedFromSql() =
+let fromSql() =
+    let customers = db.``Sales.Customers``
     let actual = 
-        db.``Sales.Customers``.FromSql(
-            "SELECT CustomerID, PersonID, StoreID, TerritoryID, AccountNumber, rowguid, ModifiedDate FROM Sales.Customer WHERE CustomerID <= {0}", 
-            2) 
-        |> Seq.toArray
+        let query = 
+            "SELECT 
+                CustomerID
+                ,PersonID
+                ,StoreID
+                ,TerritoryID
+                ,AccountNumber
+                ,rowguid
+                ,ModifiedDate 
+            FROM 
+                Sales.Customer 
+            WHERE 
+                CustomerID <= {0}"
+
+        customers.FromSql( query, 2) |> Seq.toArray
 
     let expected = 
         query {
-            for x in db.``Sales.Customers`` do
+            for x in customers do
             where (x.CustomerID <= 2) 
             select x
         }
@@ -133,7 +144,41 @@ let typedFromSql() =
 
     Assert.Equal<_ []>(expected, actual)
 
-   
+[<Fact>]
+let ``Failing From Sql Invocation That Can Be Caught At Compile Time``() =
+    let customers = db.``HumanResources.Shifts``
+
+    do //incorrect runtime parameter type: int instead of time span
+        let xs = customers.FromSql("
+            SELECT ShiftID, Name, StartTime, EndTime, ModifiedDate
+            FROM HumanResources.Shift 
+            WHERE StartTime > {0}", 42
+        )
+        let error = Assert.Throws<SqlException>(fun () -> xs |> Seq.length |> ignore)
+        Assert.Equal<string>("Operand type clash: time is incompatible with int", error.Message)
+    
+    do //missing required output column: Name
+        let xs = customers.FromSql("
+            SELECT ShiftID, StartTime, EndTime, ModifiedDate
+            FROM HumanResources.Shift"
+        )
+        let error = Assert.Throws<InvalidOperationException>(fun () -> xs |> Seq.toArray |> ignore)
+        Assert.Equal<string>(
+            "The required column 'Name' was not present in the results of a 'FromSql' operation.", 
+            error.Message
+        )
+    
+    do //invalid t-sql: "ORDER StartTime" instead of "ORDER BY StartTime"
+        let xs = customers.FromSql("
+            SELECT ShiftID, StartTime, EndTime, ModifiedDate
+            FROM HumanResources.Shift
+            ORDER StartTime
+        ")
+        let error = Assert.Throws<SqlException>(fun () -> xs |> Seq.toArray |> ignore)
+        Assert.Equal<string>(
+            "Incorrect syntax near 'StartTime'.", 
+            error.Message
+        )
 
 //open System.Linq
 //        
@@ -145,13 +190,13 @@ let typedFromSql() =
 //            let personLastName = customer.FK_Customer_Person_PersonID.LastName
 //            where (personLastName = "Zhou")
 //            //groupBy customer.PersonID into g
-////            sortByNullableDescending g.Key
-//            sumBy (o.TotalDue)
+//            //sortByNullableDescending g.Key
+//            //sumBy (o.TotalDue)
 //        }
-////        |> Seq.take 3
-////        |> Seq.toArray
+//        |> Seq.take 3
+//        |> Seq.toArray
 //        |> printfn "Result %A"
-//
+
 //[<Fact(Skip="do not work :(")>]
 //let navigationQuery2() = 
 //        query {
