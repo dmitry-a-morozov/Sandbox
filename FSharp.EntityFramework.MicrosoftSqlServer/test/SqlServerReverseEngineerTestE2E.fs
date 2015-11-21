@@ -62,47 +62,47 @@ let AllDataTypes() =
     for x, y in Array.zip expected actual do
         Assert.Equal<_>(x, y, LanguagePrimitives.FastGenericEqualityComparer)
 
-    let entityType = db.Model.GetEntityType( typeof<DB.``dbo.AllDataTypes``>)
+    let entityType = db.Model.FindEntityType( typeof<DB.``dbo.AllDataTypes``>)
 
     Assert.Equal(
         ValueGenerated.OnAddOrUpdate, 
-        entityType.GetProperty("timestampColumn").ValueGenerated
+        entityType.FindProperty("timestampColumn").ValueGenerated
     )
 
-    Assert.Equal(Nullable 1, entityType.GetProperty("binaryColumn").GetMaxLength()    )
-    Assert.Equal(Nullable 1, entityType.GetProperty("varbinaryColumn").GetMaxLength())
+    Assert.Equal(Nullable 1, entityType.FindProperty("binaryColumn").GetMaxLength()    )
+    Assert.Equal(Nullable 1, entityType.FindProperty("varbinaryColumn").GetMaxLength())
 
-    Assert.Equal(Nullable 1, entityType.GetProperty("charColumn").GetMaxLength())
-    Assert.Equal(Nullable 1, entityType.GetProperty("ncharColumn").GetMaxLength())
-    Assert.Equal(Nullable 1, entityType.GetProperty("nvarcharColumn").GetMaxLength())
-    Assert.Equal(Nullable 1, entityType.GetProperty("varcharColumn").GetMaxLength())
+    Assert.Equal(Nullable 1, entityType.FindProperty("charColumn").GetMaxLength())
+    Assert.Equal(Nullable 1, entityType.FindProperty("ncharColumn").GetMaxLength())
+    Assert.Equal(Nullable 1, entityType.FindProperty("nvarcharColumn").GetMaxLength())
+    Assert.Equal(Nullable 1, entityType.FindProperty("varcharColumn").GetMaxLength())
 
-    Assert.Equal(Nullable 1, entityType.GetProperty("binaryColumn"). GetMaxLength())
+    Assert.Equal(Nullable 1, entityType.FindProperty("binaryColumn"). GetMaxLength())
 
-    Assert.Equal<string>("binary", entityType.GetProperty("binaryColumn").SqlServer().ColumnType)
+    Assert.Equal<string>("binary", entityType.FindProperty("binaryColumn").SqlServer().ColumnType)
 
-    Assert.Equal<string>("char", entityType.GetProperty("charColumn").SqlServer().ColumnType)
-    Assert.Equal<string>("date", entityType.GetProperty("dateColumn").SqlServer().ColumnType)
-    Assert.Equal<string>("image", entityType.GetProperty("imageColumn").SqlServer().ColumnType)
-    Assert.Equal<string>("money", entityType.GetProperty("moneyColumn").SqlServer().ColumnType)
-    Assert.Equal<string>("nchar", entityType.GetProperty("ncharColumn").SqlServer().ColumnType)
-    Assert.Equal<string>("ntext", entityType.GetProperty("ntextColumn").SqlServer().ColumnType)
-    Assert.Equal<string>("decimal", entityType.GetProperty("decimalColumn").SqlServer().ColumnType)
-    Assert.Equal<string>("numeric", entityType.GetProperty("numericColumn").SqlServer().ColumnType)
-    Assert.Equal<string>("smalldatetime", entityType.GetProperty("smalldatetimeColumn").SqlServer().ColumnType)
-    Assert.Equal<string>("smallmoney", entityType.GetProperty("smallmoneyColumn").SqlServer().ColumnType)
-    Assert.Equal<string>("text", entityType.GetProperty("textColumn").SqlServer().ColumnType)
-    Assert.Equal<string>("timestamp", entityType.GetProperty("timestampColumn").SqlServer().ColumnType)
-    Assert.Equal<string>("varbinary", entityType.GetProperty("varbinaryColumn").SqlServer().ColumnType)
-    Assert.Equal<string>("varchar", entityType.GetProperty("varcharColumn").SqlServer().ColumnType)
+    Assert.Equal<string>("char", entityType.FindProperty("charColumn").SqlServer().ColumnType)
+    Assert.Equal<string>("date", entityType.FindProperty("dateColumn").SqlServer().ColumnType)
+    Assert.Equal<string>("image", entityType.FindProperty("imageColumn").SqlServer().ColumnType)
+    Assert.Equal<string>("money", entityType.FindProperty("moneyColumn").SqlServer().ColumnType)
+    Assert.Equal<string>("nchar", entityType.FindProperty("ncharColumn").SqlServer().ColumnType)
+    Assert.Equal<string>("ntext", entityType.FindProperty("ntextColumn").SqlServer().ColumnType)
+    Assert.Equal<string>("decimal", entityType.FindProperty("decimalColumn").SqlServer().ColumnType)
+    Assert.Equal<string>("numeric", entityType.FindProperty("numericColumn").SqlServer().ColumnType)
+    Assert.Equal<string>("smalldatetime", entityType.FindProperty("smalldatetimeColumn").SqlServer().ColumnType)
+    Assert.Equal<string>("smallmoney", entityType.FindProperty("smallmoneyColumn").SqlServer().ColumnType)
+    Assert.Equal<string>("text", entityType.FindProperty("textColumn").SqlServer().ColumnType)
+    Assert.Equal<string>("timestamp", entityType.FindProperty("timestampColumn").SqlServer().ColumnType)
+    Assert.Equal<string>("varbinary", entityType.FindProperty("varbinaryColumn").SqlServer().ColumnType)
+    Assert.Equal<string>("varchar", entityType.FindProperty("varcharColumn").SqlServer().ColumnType)
 //  types with explicit scale
-    Assert.Equal<string>("datetime2(4)", entityType.GetProperty("datetime24Column").SqlServer().ColumnType)
-    Assert.Equal<string>("datetime", entityType.GetProperty("datetimeColumn").SqlServer().ColumnType)
-    Assert.Equal<string>("datetimeoffset(5)", entityType.GetProperty("datetimeoffset5Column").SqlServer().ColumnType)
-    Assert.Equal<string>("time(4)", entityType.GetProperty("time4Column").SqlServer().ColumnType)
+    Assert.Equal<string>("datetime2(4)", entityType.FindProperty("datetime24Column").SqlServer().ColumnType)
+    Assert.Equal<string>("datetime", entityType.FindProperty("datetimeColumn").SqlServer().ColumnType)
+    Assert.Equal<string>("datetimeoffset(5)", entityType.FindProperty("datetimeoffset5Column").SqlServer().ColumnType)
+    Assert.Equal<string>("time(4)", entityType.FindProperty("time4Column").SqlServer().ColumnType)
 
 let getPrimaryKeyColumns(e: IEntityType) = 
-    [ for p in e.GetPrimaryKey().Properties -> p.Name ]
+    [ for p in e.FindPrimaryKey().Properties -> p.Name ]
 
 let getSingleForeightKeyColumns(e: IEntityType) = 
     let fk = e.GetForeignKeys() |> Seq.exactlyOne
@@ -110,13 +110,13 @@ let getSingleForeightKeyColumns(e: IEntityType) =
 
 [<Fact>]
 let OneToManyDependent() = 
-    let e = db.Model.GetEntityType( typeof<DB.``dbo.OneToManyDependent``>)
+    let e = db.Model.FindEntityType( typeof<DB.``dbo.OneToManyDependent``>)
     Assert.Equal<_ list>(
         [ "OneToManyDependentID1"; "OneToManyDependentID2" ],
         getPrimaryKeyColumns(e)
     )
-    Assert.Equal(Nullable 20, e.GetProperty("SomeDependentEndColumn").GetMaxLength())
-    Assert.False(e.GetProperty("SomeDependentEndColumn").IsNullable)
+    Assert.Equal(Nullable 20, e.FindProperty("SomeDependentEndColumn").GetMaxLength())
+    Assert.False(e.FindProperty("SomeDependentEndColumn").IsNullable)
     let nav = e.GetNavigations() |> Seq.exactlyOne
     Assert.Equal<_ list>(
         [ "OneToManyDependentFK1"; "OneToManyDependentFK2" ],
@@ -124,23 +124,23 @@ let OneToManyDependent() =
     )
 
     let inverseNav = 
-        db.Model.GetEntityType( typeof<DB.``dbo.OneToManyPrincipal``>).GetNavigations() |> Seq.exactlyOne
+        db.Model.FindEntityType( typeof<DB.``dbo.OneToManyPrincipal``>).GetNavigations() |> Seq.exactlyOne
 
     Assert.Same(nav, inverseNav.FindInverse())
 
 [<Fact>]
 let OneToManyPrincipal() = 
-    let e = db.Model.GetEntityType( typeof<DB.``dbo.OneToManyPrincipal``>)
+    let e = db.Model.FindEntityType( typeof<DB.``dbo.OneToManyPrincipal``>)
     Assert.Equal<_ list>(
         [ "OneToManyPrincipalID1"; "OneToManyPrincipalID2" ],
         getPrimaryKeyColumns(e)
     )
 
-    let other = e.GetProperty("Other")
+    let other = e.FindProperty("Other")
     Assert.Equal(Nullable 20, other.GetMaxLength())
     Assert.False( other.IsNullable)
 
 [<Fact>]
 let OneToOneFKToUniqueKeyDependent() = 
-    let e = db.Model.GetEntityType( typeof<DB.``dbo.OneToOneFKToUniqueKeyDependent``>)
+    let e = db.Model.FindEntityType( typeof<DB.``dbo.OneToOneFKToUniqueKeyDependent``>)
     ()
