@@ -38,7 +38,8 @@
     <OutputPath>bin\Release\</OutputPath>
     <DefineConstants>TRACE</DefineConstants>
     <WarningLevel>3</WarningLevel>
-    <DocumentationFile>bin\Release\FSharp.Data.Entity.XML</DocumentationFile>
+    <DocumentationFile>FSharp.EntityFramework.MicrosoftSqlServer.XML</DocumentationFile>
+    <StartAction>Program</StartAction>
   </PropertyGroup>
   <PropertyGroup>
     <MinimumVisualStudioVersion Condition="'$(MinimumVisualStudioVersion)' == ''">11</MinimumVisualStudioVersion>
@@ -63,8 +64,9 @@
     <Compile Include="InformationSchema.fs" />
     <Compile Include="Runtime.fs" />
     <Compile Include="SqlServerTypeProvider.fs" />
+    <Compile Include="AssemblyInfo.fs" />
     <Content Include="packages.config" />
-    <Content Include="app.config" />
+    <None Include="FSharp.EntityFramework.MicrosoftSqlServer.nuspec" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="EntityFramework.Core">
