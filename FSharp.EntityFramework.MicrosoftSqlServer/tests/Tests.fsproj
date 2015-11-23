@@ -54,8 +54,7 @@
     <Content Include="packages.config" />
     <Compile Include="AdventureWorks.fs" />
     <Compile Include="SqlServerReverseEngineerTestE2E.fs" />
-    <None Include="Scripts\EFDependecies.fsx" />
-    <None Include="Scripts\Test.fsx" />
+    <Compile Include="CustomAttributeData.Tests.fs" />
     <Content Include="app.config" />
   </ItemGroup>
   <ItemGroup>

@@ -21,7 +21,7 @@ open Inflector
 open FSharp.Data.Entity.SqlServer
 
 [<AutoOpen; CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module ProvidedTypes = 
+module private ProvidedTypes = 
     let inline addCustomAttribute<'T, ^P when 'T :> Attribute and ^P : (member AddCustomAttribute : System.Reflection.CustomAttributeData -> unit)> (provided: ^P, ctorArgs: obj list, namedArgs: list<string * obj>) = 
         let attrData = { 
             new CustomAttributeData() with
