@@ -25,6 +25,8 @@ type CustomAttributeData with
 
         let rec (|AttributeCtorCall|) expr =
             match expr with
+            | Patterns.WithValue(value, attrType, expr)
+                -> (|AttributeCtorCall|) expr
             | NewObject(ctor, args) ->  
                 let ctorArgs = 
                     args  
@@ -82,6 +84,18 @@ let ctorArgs() =
         [ typeof<string>, box "Shift" ] , 
         [ for x in attrData.ConstructorArguments -> x.ArgumentType, x.Value ]
     )
+
+//[<Fact>]
+//let ctorArgs2() = 
+//    let tableName = "Shift"
+//    let tableAttr = TableAttribute( tableName)
+//    let attrData = CustomAttributeData.Of( tableAttr)
+//    Assert.Equal(typeof<TableAttribute>, attrData.AttributeType)
+//    Assert.Equal(typeof<TableAttribute>.GetConstructor([| typeof<string> |]), attrData.Constructor)
+//    Assert.Equal<_ list>(
+//        [ typeof<string>, box "Shift" ] , 
+//        [ for x in attrData.ConstructorArguments -> x.ArgumentType, x.Value ]
+//    )
 
 [<Fact>]
 let ctorAndNamedArgs() = 

@@ -63,7 +63,7 @@
     <Compile Include="DebugProvidedTypes.fs" />
     <Compile Include="InformationSchema.fs" />
     <Compile Include="Runtime.fs" />
-    <Compile Include="SqlServerTypeProvider.fs" />
+    <Compile Include="TypeProvider.fs" />
     <Compile Include="AssemblyInfo.fs" />
     <Content Include="packages.config" />
     <None Include="FSharp.EntityFramework.MicrosoftSqlServer.nuspec" />

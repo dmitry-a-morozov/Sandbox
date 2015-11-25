@@ -174,18 +174,25 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
                     ]
                     Expr.NewArray(typeof<string * string[]>, elements)
                     
-                let defaultConfiguration = 
-                    <@ 
-                        fun (entityNames, modelBuilder) ->
-                            Runtime.primaryKeysConfiguration %%pks (entityNames, modelBuilder)
-                    @>
-
                 <@@ 
                     let modelBuilder: ModelBuilder = %%args.[1]
                     let dbContext: DbContext = %%Expr.Coerce(args.[0], typeof<DbContext>)
                     let entityTypes = 
                         dbContext.GetType().GetNestedTypes() |> Array.filter (fun t -> t.IsDefined(typeof<TableAttribute>))
-                    %defaultConfiguration <| (entityTypes, modelBuilder)
+
+                    //configure primary keys
+                    do 
+                        let pkByTable = Map.ofArray %%pks
+
+                        for t in entityTypes do
+                            let e = modelBuilder.Entity(t)
+                            let relational = e.Metadata.Relational()
+                            let twoPartTableName = sprintf "%s.%s" relational.Schema relational.TableName
+
+                            twoPartTableName
+                            |> pkByTable.TryFind 
+                            |> Option.iter (fun pkColumns -> e.HasKey( pkColumns) |> ignore)
+
                     let modelCreating = %%Expr.FieldGet(args.[0], field)
                     if box modelCreating <> null
                     then 
