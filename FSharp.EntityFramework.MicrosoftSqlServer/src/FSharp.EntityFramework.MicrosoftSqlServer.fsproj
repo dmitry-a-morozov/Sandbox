@@ -62,7 +62,6 @@
     <Compile Include="ProvidedTypes.fs" />
     <Compile Include="DebugProvidedTypes.fs" />
     <Compile Include="InformationSchema.fs" />
-    <Compile Include="Runtime.fs" />
     <Compile Include="TypeProvider.fs" />
     <Compile Include="AssemblyInfo.fs" />
     <Content Include="packages.config" />
