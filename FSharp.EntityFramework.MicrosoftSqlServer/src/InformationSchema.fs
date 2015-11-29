@@ -81,7 +81,6 @@ type Column = {
     IsComputed: bool
     MaxLength: int
     NonDefaultScale: int option    
-    IsPartOfPrimaryKey: bool
     DefaultValue: string
 }   
     with
@@ -164,7 +163,6 @@ type SqlConnection with
 	                ,columns.max_length
 	                ,CAST( NULLIF( columns.scale, types.scale) AS INT) AS scale
 	                ,default_constraint = ISNULL( OBJECT_DEFINITION(columns.default_object_id), '')
-	                ,is_part_of_primary_key = CASE WHEN index_columns.object_id IS NULL THEN 0 ELSE 1 END
                 FROM
 	                sys.schemas  
 	                JOIN sys.tables ON schemas.schema_id = tables.schema_id
@@ -172,13 +170,6 @@ type SqlConnection with
 	                JOIN sys.types ON columns.system_type_id = types.system_type_id 
 	                	AND ((types.is_assembly_type = 1 AND columns.user_type_id = types.user_type_id) 
 	                		OR columns.system_type_id = types.user_type_id)
-	                LEFT JOIN sys.indexes ON 
-		                tables.object_id = indexes.object_id 
-		                AND indexes.is_primary_key = 1
-	                LEFT JOIN sys.index_columns ON 
-		                index_columns.object_id = tables.object_id 
-		                AND index_columns.index_id = indexes.index_id 
-		                AND columns.column_id = index_columns.column_id
                 WHERE
                     schemas.name = '%s' AND tables.name = '%s'
                 ORDER BY 
@@ -196,7 +187,6 @@ type SqlConnection with
                 IsComputed = x ? is_computed 
                 MaxLength = int<int16> x ? max_length
                 NonDefaultScale = x.TryGetValue("scale")
-                IsPartOfPrimaryKey = x ? is_part_of_primary_key = 1
                 DefaultValue = x ? default_constraint
             }
         )
