@@ -53,6 +53,7 @@
   <ItemGroup>
     <Content Include="packages.config" />
     <Compile Include="AdventureWorks.fs" />
+    <Compile Include="Jamie.fs" />
     <Compile Include="SqlServerReverseEngineerTestE2E.fs" />
     <Compile Include="CustomAttributeData.Tests.fs" />
     <Content Include="app.config" />
