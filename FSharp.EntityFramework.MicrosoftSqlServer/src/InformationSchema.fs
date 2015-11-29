@@ -4,6 +4,7 @@ module internal FSharp.Data.Entity.SqlServer.InformationSchema
 open System
 open System.Data.SqlClient
 open System.Data
+open System.Collections.Generic
 open ProviderImplementation.ProvidedTypes
 
 let typeMapping = 
@@ -64,7 +65,8 @@ let typeMapping =
         //"table", typeof<TODO>
     ]
 
-let unicodeTypes = set [ "nchar"; "ntext"; "nvarchar"; "sysname"]
+let unicodeTypes = HashSet [ "nchar"; "ntext"; "nvarchar"; "sysname"]
+let unsupportedColumnTypes = HashSet [ "hierarchyid"; "sql_variant"; "geography"; "geometry"; "xml" ]
 
 type Table = {
     Schema: string
@@ -96,10 +98,12 @@ type ForeignKey = {
     Parent: Table 
 }
 
-type PrimaryKey = {
+type Index = {
     Name: string
     Table: Table
     Columns: string[] 
+    IsPrimaryKey: bool
+    IsUnique: bool
 }
 
 type SqlDataReader with
@@ -225,7 +229,7 @@ type SqlConnection with
         |> Seq.distinctBy (fun x -> x.Parent)
         |> Seq.toArray
 
-    member this.GetAllPrimaryKeys() = 
+    member this.GetIndexes() = 
         let query = "
             SELECT 
 	            indexes.name AS Name
@@ -233,6 +237,9 @@ type SqlConnection with
 	            ,tables.name AS TableName
 	            ,columns.name AS ColumnName
 	            ,index_columns.key_ordinal As ColumnKeyOrdinal
+                ,is_primary_key
+                ,is_unique
+				,TYPE_NAME(columns.system_type_id) AS type_name
             FROM
 	            sys.indexes 
 	            JOIN sys.tables ON tables.object_id = indexes.object_id 
@@ -243,20 +250,27 @@ type SqlConnection with
 	            JOIN sys.columns ON 
 		            columns.object_id = index_columns.object_id 
 		            AND columns.column_id = index_columns.column_id
-            WHERE
-	            indexes.is_primary_key = 1
-            --ORDER BY TableSchema, TableName, KeyOrdinal
+            ORDER BY 
+                TableSchema, TableName, ColumnKeyOrdinal
         "
 
         this.Execute( query)
-        |> Seq.map(fun x -> (x ? Name, x ? TableSchema, x ? TableName), x ? ColumnName)
+        |> Seq.map(fun x -> (x ? Name, x ? TableSchema, x ? TableName, x ? is_primary_key, x ? is_unique), (x ? ColumnName, x.TryGetValue("type_name")))
         |> Seq.groupBy fst
-        |> Seq.map (fun ((name, tableSchema, tableName), xs) -> 
-            { 
-                Name = name
-                Table = { Schema = tableSchema; Name = tableName }
-                Columns = [| for _, columnName in xs -> columnName |]
-            }
+        |> Seq.choose (fun ((name, tableSchema, tableName, isPrimaryKey, isUnique), xs) -> 
+            let colNames, colTypes = xs |> Seq.map snd |> Seq.toArray |> Array.unzip
+            if colTypes |> Array.exists Option.isNone 
+                || colTypes |> Array.choose id |> unsupportedColumnTypes.Overlaps
+            then 
+                None
+            else
+                Some { 
+                    Name = name
+                    Table = { Schema = tableSchema; Name = tableName }
+                    Columns = colNames
+                    IsPrimaryKey = isPrimaryKey
+                    IsUnique = isUnique
+                }
         )
         |> Seq.toArray
 

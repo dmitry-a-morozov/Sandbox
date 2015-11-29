@@ -62,7 +62,6 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
         let p, f = getAutoProperty(name, clrType)
         [ p; f ]
                                 
-    let unsupportedColumnTypes = set [ "hierarchyid"; "sql_variant"; "geography"; "geometry"; "xml" ]
     let hardToMapDatatypes = 
         set [
             "binary"; "image"; "timestamp"; "varbinary"
@@ -165,14 +164,17 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
                 use conn = new SqlConnection( connectionString)
                 conn.Open()
                 
-                let pks = 
+                let indeces = 
                     let elements = [ 
-                        for pk in conn.GetAllPrimaryKeys() do 
-                            let table = Expr.Value( pk.Table.TwoPartName)
-                            let columns = Expr.NewArray( typeof<string>, [ for col in pk.Columns -> Expr.Value( col) ])
-                            yield Expr.NewTuple [ table; columns ] 
+                        for index in conn.GetIndexes() do 
+                            let table = Expr.Value( index.Table.TwoPartName)
+                            let name = Expr.Value index.Name
+                            let isPrimaryKey = Expr.Value( index.IsPrimaryKey)
+                            let isUnique = Expr.Value( index.IsUnique)
+                            let columns = Expr.NewArray( typeof<string>, [ for col in index.Columns -> Expr.Value( col) ])
+                            yield Expr.NewTuple [ table; name; isPrimaryKey; isUnique; columns ] 
                     ]
-                    Expr.NewArray(typeof<string * string[]>, elements)
+                    Expr.NewArray(typeof<string * string * bool * bool * string[]>, elements)
                     
                 <@@ 
                     let modelBuilder: ModelBuilder = %%args.[1]
@@ -180,18 +182,27 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
                     let entityTypes = 
                         dbContext.GetType().GetNestedTypes() |> Array.filter (fun t -> t.IsDefined(typeof<TableAttribute>))
 
-                    //configure primary keys
+                    //configure indices: primary keys & unique
                     do 
-                        let pkByTable = Map.ofArray %%pks
+                        let indecesByTable = 
+                            %%indeces
+                            |> Array.groupBy (fun (tableName, _, _, _, _) -> tableName) 
+                            |> dict
 
                         for t in entityTypes do
                             let e = modelBuilder.Entity(t)
                             let relational = e.Metadata.Relational()
                             let twoPartTableName = sprintf "%s.%s" relational.Schema relational.TableName
 
-                            twoPartTableName
-                            |> pkByTable.TryFind 
-                            |> Option.iter (fun pkColumns -> e.HasKey( pkColumns) |> ignore)
+                            if indecesByTable.ContainsKey(twoPartTableName)
+                            then 
+                                let indeces = indecesByTable.[twoPartTableName]
+                                for _, name, isPrimaryKey, isUnique, columns in indeces do
+                                    if isPrimaryKey
+                                    then e.HasKey( columns) |> ignore
+                                    elif isUnique 
+                                    then e.HasIndex(columns).HasName(name).IsUnique() |> ignore
+                                    else e.HasIndex(columns).HasName(name) |> ignore
 
                     let modelCreating = %%Expr.FieldGet(args.[0], field)
                     if box modelCreating <> null
@@ -237,7 +248,7 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
                                         if requiredRefTypeColumn
                                         then addCustomAttribute<RequiredAttribute, _>(prop, [], [])
 
-                                        if col.DataType = "timestamp"
+                                        if col.DataType = "timestamp" || col.IsComputed
                                         then 
                                             addCustomAttribute<DatabaseGeneratedAttribute, _>(prop, [ DatabaseGeneratedOption.Computed ], [])
 

@@ -143,4 +143,34 @@ let OneToManyPrincipal() =
 [<Fact>]
 let OneToOneFKToUniqueKeyDependent() = 
     let e = db.Model.FindEntityType( typeof<DB.``dbo.OneToOneFKToUniqueKeyDependent``>)
-    ()
+    Assert.Equal<_ list>(
+        [ "OneToOneFKToUniqueKeyDependentID1"; "OneToOneFKToUniqueKeyDependentID2" ],
+        getPrimaryKeyColumns(e)
+    )    
+    
+    let ix = e.GetIndexes() |> Seq.exactlyOne
+    Assert.Equal<_ []>(
+        [| "OneToOneFKToUniqueKeyDependentFK1"; "OneToOneFKToUniqueKeyDependentFK2" |],
+        [| for p in ix.Properties -> p.Name |]
+    )
+    Assert.True(ix.IsUnique)
+    Assert.Equal<string>("UK_OneToOneFKToUniqueKeyDependent", ix.SqlServer().Name)   
+
+[<Fact>]
+let PropertyConfiguration() = 
+    let e = db.Model.FindEntityType( typeof<DB.``dbo.PropertyConfiguration``>)
+    let ix = e.GetIndexes() |> Seq.exactlyOne
+    Assert.Equal<_ []>(
+        [| "A"; "B" |],
+        [| for p in ix.Properties -> p.Name |]
+    )
+    Assert.False(ix.IsUnique)
+    Assert.Equal<string>("Test_PropertyConfiguration_Index", ix.SqlServer().Name)   
+    
+    let rowversionColumn = e.FindProperty("RowversionColumn")
+    Assert.Equal<string>("timestamp", rowversionColumn.SqlServer().ColumnType)
+    Assert.Equal(ValueGenerated.OnAddOrUpdate, rowversionColumn.ValueGenerated)
+
+    Assert.Equal(ValueGenerated.OnAddOrUpdate, e.FindProperty("SumOfAAndB").ValueGenerated)
+
+    Assert.Equal<obj>(box "getdate()", e.FindProperty("WithDateDefaultExpression").SqlServer().DefaultValue)
