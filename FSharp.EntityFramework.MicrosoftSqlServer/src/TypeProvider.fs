@@ -125,93 +125,98 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
         this.AddEntityTypesAndDataSets(dbContextType, connectionString, pluralize, suppressForeignKeyProperties)
 
         do 
-            let name = "OnConfiguring"
-            let field = ProvidedField(name.Camelize(), typeof<DbContextOptionsBuilder -> unit>)
-            dbContextType.AddMember field
+            dbContextType.AddMembersDelayed <| fun() ->
+                [
+                    let name = "OnConfiguring"
+                    let field = ProvidedField(name.Camelize(), typeof<DbContextOptionsBuilder -> unit>)
+                    yield field :> MemberInfo
 
-            let property = ProvidedProperty(name, field.FieldType)
-            property.SetterCode <- fun args -> Expr.FieldSet(args.[0], field, args.[1])
-            dbContextType.AddMember property
+                    let property = ProvidedProperty(name, field.FieldType)
+                    property.SetterCode <- fun args -> Expr.FieldSet(args.[0], field, args.[1])
+                    yield upcast property
 
-            let vTableHandle = typeof<DbContext>.GetMethod(name, BindingFlags.Instance ||| BindingFlags.NonPublic)
-            let impl = ProvidedMethod(vTableHandle.Name, [ ProvidedParameter("optionsBuilder", typeof<DbContextOptionsBuilder>) ], typeof<Void>)
-            impl.SetMethodAttrs(vTableHandle.Attributes ||| MethodAttributes.Virtual)
-            dbContextType.AddMember impl
-            impl.InvokeCode <- fun args -> 
-                <@@ 
-                    let configuring = %%Expr.FieldGet(args.Head, field)
-                    let optionsBuilder: DbContextOptionsBuilder = %%args.[1]
-                    optionsBuilder.UseSqlServer(connectionString: string) |> ignore
-                    if box configuring <> null
-                    then configuring optionsBuilder
-                @@>
-            dbContextType.DefineMethodOverride(impl, vTableHandle)
+                    let vTableHandle = typeof<DbContext>.GetMethod(name, BindingFlags.Instance ||| BindingFlags.NonPublic)
+                    let impl = ProvidedMethod(vTableHandle.Name, [ ProvidedParameter("optionsBuilder", typeof<DbContextOptionsBuilder>) ], typeof<Void>)
+                    impl.SetMethodAttrs(vTableHandle.Attributes ||| MethodAttributes.Virtual)
+                    yield upcast  impl
+                    impl.InvokeCode <- fun args -> 
+                        <@@ 
+                            let configuring = %%Expr.FieldGet(args.Head, field)
+                            let optionsBuilder: DbContextOptionsBuilder = %%args.[1]
+                            optionsBuilder.UseSqlServer(connectionString: string) |> ignore
+                            if box configuring <> null
+                            then configuring optionsBuilder
+                        @@>
+                    dbContextType.DefineMethodOverride(impl, vTableHandle)
+                ]
 
         do 
-            let name = "OnModelCreating"
-            let field = ProvidedField(name.Camelize(), typeof<ModelBuilder -> unit>)
-            dbContextType.AddMember field
+            dbContextType.AddMembersDelayed <| fun() ->
+                [
+                    let name = "OnModelCreating"
+                    let field = ProvidedField(name.Camelize(), typeof<ModelBuilder -> unit>)
+                    yield field :> MemberInfo
 
-            let property = ProvidedProperty(name, field.FieldType)
-            property.SetterCode <- fun args -> Expr.FieldSet(args.[0], field, args.[1])
-            dbContextType.AddMember property
+                    let property = ProvidedProperty(name, field.FieldType)
+                    property.SetterCode <- fun args -> Expr.FieldSet(args.[0], field, args.[1])
+                    yield upcast property
 
-            let vTableHandle = typeof<DbContext>.GetMethod(name, BindingFlags.Instance ||| BindingFlags.NonPublic)
-            let impl = ProvidedMethod(vTableHandle.Name, [ ProvidedParameter("modelBuilder", typeof<ModelBuilder>) ], typeof<Void>)
-            impl.SetMethodAttrs(vTableHandle.Attributes ||| MethodAttributes.Virtual)
-            dbContextType.AddMember impl
-            impl.InvokeCode <- fun args -> 
-                use conn = new SqlConnection( connectionString)
-                conn.Open()
+                    let vTableHandle = typeof<DbContext>.GetMethod(name, BindingFlags.Instance ||| BindingFlags.NonPublic)
+                    let impl = ProvidedMethod(vTableHandle.Name, [ ProvidedParameter("modelBuilder", typeof<ModelBuilder>) ], typeof<Void>)
+                    impl.SetMethodAttrs(vTableHandle.Attributes ||| MethodAttributes.Virtual)
+                    yield upcast impl
+                    impl.InvokeCode <- fun args -> 
+                        use conn = new SqlConnection( connectionString)
+                        conn.Open()
                 
-                let indeces = 
-                    let elements = [ 
-                        for index in conn.GetIndexes() do 
-                            let table = Expr.Value( index.Table.TwoPartName)
-                            let name = Expr.Value index.Name
-                            let isPrimaryKey = Expr.Value( index.IsPrimaryKey)
-                            let isUnique = Expr.Value( index.IsUnique)
-                            let columns = Expr.NewArray( typeof<string>, [ for col in index.Columns -> Expr.Value( col) ])
-                            yield Expr.NewTuple [ table; name; isPrimaryKey; isUnique; columns ] 
-                    ]
-                    Expr.NewArray(typeof<string * string * bool * bool * string[]>, elements)
+                        let indeces = 
+                            let elements = [ 
+                                for index in conn.GetIndexes() do 
+                                    let table = Expr.Value( index.Table.TwoPartName)
+                                    let name = Expr.Value index.Name
+                                    let isPrimaryKey = Expr.Value( index.IsPrimaryKey)
+                                    let isUnique = Expr.Value( index.IsUnique)
+                                    let columns = Expr.NewArray( typeof<string>, [ for col in index.Columns -> Expr.Value( col) ])
+                                    yield Expr.NewTuple [ table; name; isPrimaryKey; isUnique; columns ] 
+                            ]
+                            Expr.NewArray(typeof<string * string * bool * bool * string[]>, elements)
                     
-                <@@ 
-                    let modelBuilder: ModelBuilder = %%args.[1]
-                    let dbContext: DbContext = %%Expr.Coerce(args.[0], typeof<DbContext>)
-                    let entityTypes = 
-                        dbContext.GetType().GetNestedTypes() |> Array.filter (fun t -> t.IsDefined(typeof<TableAttribute>))
+                        <@@ 
+                            let modelBuilder: ModelBuilder = %%args.[1]
+                            let dbContext: DbContext = %%Expr.Coerce(args.[0], typeof<DbContext>)
+                            let entityTypes = 
+                                dbContext.GetType().GetNestedTypes() |> Array.filter (fun t -> t.IsDefined(typeof<TableAttribute>))
 
-                    //configure indices: primary keys & unique
-                    do 
-                        let indecesByTable = 
-                            %%indeces
-                            |> Array.groupBy (fun (tableName, _, _, _, _) -> tableName) 
-                            |> dict
+                            //configure indices: primary keys & unique
+                            do 
+                                let indecesByTable = 
+                                    %%indeces
+                                    |> Array.groupBy (fun (tableName, _, _, _, _) -> tableName) 
+                                    |> dict
 
-                        for t in entityTypes do
-                            let e = modelBuilder.Entity(t)
-                            let relational = e.Metadata.Relational()
-                            let twoPartTableName = sprintf "%s.%s" relational.Schema relational.TableName
+                                for t in entityTypes do
+                                    let e = modelBuilder.Entity(t)
+                                    let relational = e.Metadata.Relational()
+                                    let twoPartTableName = sprintf "%s.%s" relational.Schema relational.TableName
 
-                            if indecesByTable.ContainsKey(twoPartTableName)
+                                    if indecesByTable.ContainsKey(twoPartTableName)
+                                    then 
+                                        let indeces = indecesByTable.[twoPartTableName]
+                                        for _, name, isPrimaryKey, isUnique, columns in indeces do
+                                            if isPrimaryKey
+                                            then e.HasKey( columns) |> ignore
+                                            elif isUnique 
+                                            then e.HasIndex(columns).HasName(name).IsUnique() |> ignore
+                                            else e.HasIndex(columns).HasName(name) |> ignore
+
+                            let modelCreating = %%Expr.FieldGet(args.[0], field)
+                            if box modelCreating <> null
                             then 
-                                let indeces = indecesByTable.[twoPartTableName]
-                                for _, name, isPrimaryKey, isUnique, columns in indeces do
-                                    if isPrimaryKey
-                                    then e.HasKey( columns) |> ignore
-                                    elif isUnique 
-                                    then e.HasIndex(columns).HasName(name).IsUnique() |> ignore
-                                    else e.HasIndex(columns).HasName(name) |> ignore
-
-                    let modelCreating = %%Expr.FieldGet(args.[0], field)
-                    if box modelCreating <> null
-                    then 
-                        modelCreating modelBuilder
-                @@>
-            dbContextType.DefineMethodOverride(impl, vTableHandle)
-
-
+                                modelCreating modelBuilder
+                        @@>
+                    dbContextType.DefineMethodOverride(impl, vTableHandle)
+            ]
+            
         dbContextType
 
     member internal this.AddEntityTypesAndDataSets(dbConTextType: ProvidedTypeDefinition, connectionString, pluralize, suppressForeignKeyProperties) = 
