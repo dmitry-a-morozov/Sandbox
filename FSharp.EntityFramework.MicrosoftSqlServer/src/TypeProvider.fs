@@ -169,6 +169,14 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
                         use conn = new SqlConnection( connectionString)
                         conn.Open()
                 
+//                        let getDefaultValues = 
+//                            async {
+//                                use conn = new SqlConnection( connectionString)
+//                                do! conn.OpenAsync() |> Async.AwaitTask
+//                                return! conn.GetDefaultColumnValues()
+//                            }
+//                            |> Async.StartAsTask
+
                         let indeces = 
                             let elements = [ 
                                 for index in conn.GetIndexes() do 
@@ -180,6 +188,26 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
                                     yield Expr.NewTuple [ table; name; isPrimaryKey; isUnique; columns ] 
                             ]
                             Expr.NewArray(typeof<string * string * bool * bool * string[]>, elements)
+
+//                        let defaultColumnValues = 
+//                            let elements = 
+//                                getDefaultValues.Result
+//                                |> List.groupBy fst
+//                                |> List.map (fun (tbl, xs) -> 
+//                                    let twoPartsTableName = Expr.Value tbl.TwoPartName
+//                                    let columnsWithDeafult =  
+//                                        let elements = [ 
+//                                            for  _, (column: string, defaultValue: string) in xs do
+//                                                let defaultValueParentRemoved = 
+//                                                    if defaultValue.StartsWith("(") && defaultValue.EndsWith(")")
+//                                                    then defaultValue.Substring(1, defaultValue.Length - 2)
+//                                                    else defaultValue
+//                                                yield Expr.NewTuple [ Expr.Value column; Expr.Value( defaultValueParentRemoved) ]
+//                                        ]
+//                                        Expr.NewArray( typeof<string * string>, elements)
+//                                    Expr.NewTuple [ twoPartsTableName; columnsWithDeafult ]
+//                                )
+//                            Expr.NewArray(typeof<string * (string * string)[]>, elements)
                     
                         <@@ 
                             let modelBuilder: ModelBuilder = %%args.[1]
@@ -187,27 +215,29 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
                             let entityTypes = 
                                 dbContext.GetType().GetNestedTypes() |> Array.filter (fun t -> t.IsDefined(typeof<TableAttribute>))
 
-                            //configure indices: primary keys & unique
-                            do 
-                                let indecesByTable = 
-                                    %%indeces
-                                    |> Array.groupBy (fun (tableName, _, _, _, _) -> tableName) 
-                                    |> dict
+                            let indecesByTable = %%indeces |> Array.groupBy (fun (tableName, _, _, _, _) -> tableName) |> dict
 
-                                for t in entityTypes do
-                                    let e = modelBuilder.Entity(t)
-                                    let relational = e.Metadata.Relational()
-                                    let twoPartTableName = sprintf "%s.%s" relational.Schema relational.TableName
+                            //let columnsWithDefaultValuebyTable = (%%defaultColumnValues: (string * (string * string)[])[]) |> dict
 
-                                    if indecesByTable.ContainsKey(twoPartTableName)
-                                    then 
-                                        let indeces = indecesByTable.[twoPartTableName]
-                                        for _, name, isPrimaryKey, isUnique, columns in indeces do
-                                            if isPrimaryKey
-                                            then e.HasKey( columns) |> ignore
-                                            elif isUnique 
-                                            then e.HasIndex(columns).HasName(name).IsUnique() |> ignore
-                                            else e.HasIndex(columns).HasName(name) |> ignore
+                            for t in entityTypes do
+                                let e = modelBuilder.Entity(t)
+                                let relational = e.Metadata.Relational()
+                                let twoPartTableName = sprintf "%s.%s" relational.Schema relational.TableName
+
+                                if indecesByTable.ContainsKey(twoPartTableName)
+                                then 
+                                    let indeces = indecesByTable.[twoPartTableName]
+                                    for _, name, isPrimaryKey, isUnique, columns in indeces do
+                                        if isPrimaryKey
+                                        then e.HasKey( columns) |> ignore
+                                        elif isUnique 
+                                        then e.HasIndex(columns).HasName(name).IsUnique() |> ignore
+                                        else e.HasIndex(columns).HasName(name) |> ignore
+                                    
+//                                if columnsWithDefaultValuebyTable.ContainsKey(twoPartTableName)
+//                                then 
+//                                    for col, defaultValue in columnsWithDefaultValuebyTable.[twoPartTableName] do
+//                                        e.Property(col).HasDefaultValueSql(defaultValue) |> ignore
 
                             let modelCreating = %%Expr.FieldGet(args.[0], field)
                             if box modelCreating <> null

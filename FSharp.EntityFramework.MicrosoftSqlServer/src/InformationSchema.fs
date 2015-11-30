@@ -253,7 +253,6 @@ type SqlConnection with
             ORDER BY 
                 TableSchema, TableName, ColumnKeyOrdinal
         "
-
         this.Execute( query)
         |> Seq.map(fun x -> (x ? Name, x ? TableSchema, x ? TableName, x ? is_primary_key, x ? is_unique), (x ? ColumnName, x.TryGetValue("type_name")))
         |> Seq.groupBy fst
@@ -274,5 +273,21 @@ type SqlConnection with
         )
         |> Seq.toArray
 
+
+    member this.GetDefaultColumnValues() = 
+        async {
+            let query = "
+                SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, COLUMN_DEFAULT
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE COLUMN_DEFAULT IS NOT NULL    
+            "
+            use cmd = new SqlCommand(query, this)
+            use! cursor = cmd.ExecuteReaderAsync() |> Async.AwaitTask
+            let result = Dictionary()
+            return [ 
+                while cursor.Read() do 
+                    yield { Schema = cursor ? TABLE_SCHEMA; Name = cursor ? TABLE_NAME }, (cursor ? COLUMN_NAME, cursor ? COLUMN_DEFAULT) 
+            ]
+        }
 
 
