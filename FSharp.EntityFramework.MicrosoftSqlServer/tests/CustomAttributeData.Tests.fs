@@ -20,7 +20,7 @@ type CustomAttributeData with
                 | Sequential( left, PropertySet( Some( Var this), propertyInfo, [], ValueWithName( value, typ, _))) when this = attrInstance ->
                     yield! parseAttributePropertySetters attrInstance left
                     yield CustomAttributeNamedArgument(propertyInfo, CustomAttributeTypedArgument( typ, value))
-                | _ -> failwith "Unexpected expression: %A" expr
+                | _ -> failwithf "Unexpected expression: %A" expr
             }
 
         let rec (|AttributeCtorCall|) expr =

@@ -9,7 +9,7 @@ open Microsoft.Data.Entity
 
 type DB = SqlServer<"Data Source=.;Initial Catalog=SqlServerReverseEngineerTestE2E;Integrated Security=True">
 let db = new DB()
-
+    
 [<Fact>]
 let AllDataTypes() = 
     let expected = [|
@@ -173,4 +173,10 @@ let PropertyConfiguration() =
 
     Assert.Equal(ValueGenerated.OnAddOrUpdate, e.FindProperty("SumOfAAndB").ValueGenerated)
 
-    //Assert.Equal<obj>(box "getdate()", e.FindProperty("WithDateDefaultExpression").SqlServer().DefaultValue)
+    Assert.Equal<string>("getdate()", e.FindProperty("WithDateDefaultExpression").SqlServer().GeneratedValueSql)
+    Assert.Equal<string>("'October 20, 2015 11am'", e.FindProperty("WithDateFixedDefault").SqlServer().GeneratedValueSql)
+    Assert.Equal(-1, e.FindProperty("WithDefaultValue").SqlServer().DefaultValue |> unbox)
+    Assert.Equal(0.0M, e.FindProperty("WithMoneyDefaultValue").SqlServer().DefaultValue |> unbox)
+    Assert.Equal<string>("newsequentialid()", e.FindProperty("WithGuidDefaultExpression").SqlServer().GeneratedValueSql)
+    Assert.Null(e.FindProperty("WithVarcharNullDefaultValue").SqlServer().DefaultValue)
+    Assert.Null(e.FindProperty("WithVarcharNullDefaultValue").SqlServer().GeneratedValueSql)

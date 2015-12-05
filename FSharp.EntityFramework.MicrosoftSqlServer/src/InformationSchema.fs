@@ -83,7 +83,6 @@ type Column = {
     IsComputed: bool
     MaxLength: int
     NonDefaultScale: int option    
-    DefaultValue: string
 }   
     with
     member this.ClrType = 
@@ -166,7 +165,6 @@ type SqlConnection with
 	                ,columns.is_computed
 	                ,columns.max_length
 	                ,CAST( NULLIF( columns.scale, types.scale) AS INT) AS scale
-	                ,default_constraint = ISNULL( OBJECT_DEFINITION(columns.default_object_id), '')
                 FROM
 	                sys.schemas  
 	                JOIN sys.tables ON schemas.schema_id = tables.schema_id
@@ -191,7 +189,6 @@ type SqlConnection with
                 IsComputed = x ? is_computed 
                 MaxLength = int<int16> x ? max_length
                 NonDefaultScale = x.TryGetValue("scale")
-                DefaultValue = x ? default_constraint
             }
         )
         |> Seq.toArray
@@ -279,7 +276,7 @@ type SqlConnection with
             let query = "
                 SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, COLUMN_DEFAULT
                 FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE COLUMN_DEFAULT IS NOT NULL    
+                WHERE COLUMN_DEFAULT <> '(NULL)'    
             "
             use cmd = new SqlCommand(query, this)
             use! cursor = cmd.ExecuteReaderAsync() |> Async.AwaitTask

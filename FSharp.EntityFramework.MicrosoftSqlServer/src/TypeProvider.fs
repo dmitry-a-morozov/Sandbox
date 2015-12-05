@@ -169,13 +169,13 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
                         use conn = new SqlConnection( connectionString)
                         conn.Open()
                 
-//                        let getDefaultValues = 
-//                            async {
-//                                use conn = new SqlConnection( connectionString)
-//                                do! conn.OpenAsync() |> Async.AwaitTask
-//                                return! conn.GetDefaultColumnValues()
-//                            }
-//                            |> Async.StartAsTask
+                        let getDefaultValues = 
+                            async {
+                                use conn = new SqlConnection( connectionString)
+                                do! conn.OpenAsync() |> Async.AwaitTask
+                                return! conn.GetDefaultColumnValues()
+                            }
+                            |> Async.StartAsTask
 
                         let indeces = 
                             let elements = [ 
@@ -189,25 +189,24 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
                             ]
                             Expr.NewArray(typeof<string * string * bool * bool * string[]>, elements)
 
-//                        let defaultColumnValues = 
-//                            let elements = 
-//                                getDefaultValues.Result
-//                                |> List.groupBy fst
-//                                |> List.map (fun (tbl, xs) -> 
-//                                    let twoPartsTableName = Expr.Value tbl.TwoPartName
-//                                    let columnsWithDeafult =  
-//                                        let elements = [ 
-//                                            for  _, (column: string, defaultValue: string) in xs do
-//                                                let defaultValueParentRemoved = 
-//                                                    if defaultValue.StartsWith("(") && defaultValue.EndsWith(")")
-//                                                    then defaultValue.Substring(1, defaultValue.Length - 2)
-//                                                    else defaultValue
-//                                                yield Expr.NewTuple [ Expr.Value column; Expr.Value( defaultValueParentRemoved) ]
-//                                        ]
-//                                        Expr.NewArray( typeof<string * string>, elements)
-//                                    Expr.NewTuple [ twoPartsTableName; columnsWithDeafult ]
-//                                )
-//                            Expr.NewArray(typeof<string * (string * string)[]>, elements)
+                        let defaultColumnValues = 
+                            let elements = 
+                                getDefaultValues.Result
+                                |> List.groupBy fst
+                                |> List.map (fun (tbl, xs) -> 
+                                    let twoPartsTableName = Expr.Value tbl.TwoPartName
+                                    let columnsWithDeafult =  
+                                        let elements = [ 
+                                            for  _, (column: string, defaultValue: string) in xs do
+                                                let x = ref defaultValue
+                                                while x.Value.StartsWith("(") && x.Value.EndsWith(")") do
+                                                    x := x.Value.Substring(1, x.Value.Length - 2)
+                                                yield Expr.NewTuple [ Expr.Value column; Expr.Value( x.Value) ]
+                                        ]
+                                        Expr.NewArray( typeof<string * string>, elements)
+                                    Expr.NewTuple [ twoPartsTableName; columnsWithDeafult ]
+                                )
+                            Expr.NewArray(typeof<string * (string * string)[]>, elements)
                     
                         <@@ 
                             let modelBuilder: ModelBuilder = %%args.[1]
@@ -217,7 +216,7 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
 
                             let indecesByTable = %%indeces |> Array.groupBy (fun (tableName, _, _, _, _) -> tableName) |> dict
 
-                            //let columnsWithDefaultValuebyTable = (%%defaultColumnValues: (string * (string * string)[])[]) |> dict
+                            let columnsWithDefaultValuebyTable = (%%defaultColumnValues: (string * (string * string)[])[]) |> dict
 
                             for t in entityTypes do
                                 let e = modelBuilder.Entity(t)
@@ -234,11 +233,16 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
                                         then e.HasIndex(columns).HasName(name).IsUnique() |> ignore
                                         else e.HasIndex(columns).HasName(name) |> ignore
                                     
-//                                if columnsWithDefaultValuebyTable.ContainsKey(twoPartTableName)
-//                                then 
-//                                    for col, defaultValue in columnsWithDefaultValuebyTable.[twoPartTableName] do
-//                                        e.Property(col).HasDefaultValueSql(defaultValue) |> ignore
-
+                                if columnsWithDefaultValuebyTable.ContainsKey(twoPartTableName)
+                                then 
+                                    for col, defaultValue in columnsWithDefaultValuebyTable.[twoPartTableName] do
+                                        let p = e.Property( t.GetProperty(col).PropertyType, col)
+                                        try 
+                                            let value = Convert.ChangeType(defaultValue, p.Metadata.ClrType)
+                                            p.ForSqlServerHasDefaultValue( value) |> ignore
+                                        with _ ->
+                                            p.ForSqlServerHasDefaultValueSql( defaultValue) |> ignore
+                    
                             let modelCreating = %%Expr.FieldGet(args.[0], field)
                             if box modelCreating <> null
                             then 
@@ -277,7 +281,7 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
                                 for col in conn.GetColumns( table) do
                                     if not(unsupportedColumnTypes.Contains col.DataType)
                                     then 
-                                        let prop, field  = getAutoProperty( col.Name, col.ClrType)
+                                        let prop, field = getAutoProperty( col.Name, col.ClrType)
 
                                         let requiredRefTypeColumn = not col.IsNullable && not col.ClrType.IsValueType
                                         if requiredRefTypeColumn
@@ -298,7 +302,7 @@ type public SqlServerDbContextTypeProvider(config: TypeProviderConfig) as this =
                                             addCustomAttribute<MaxLengthAttribute, _>(prop, [ maxLength ], [])
                                         )
 
-                                        if hardToMapDatatypes.Contains col.DataType
+                                        if hardToMapDatatypes.Contains col.DataType 
                                         then 
                                             let scale = 
                                                 match col.NonDefaultScale, col.DataType with
