@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 14
+VisualStudioVersion = 14.0.24720.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Counter", "Counter\Counter.csproj", "{892F128E-5A3C-4A6B-AB6C-38343A903C22}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Counter-Vanilla", "Counter-Vanilla\Counter-Vanilla.csproj", "{CF7FB748-8275-4DC4-9464-8FB7BBB1A6BA}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{892F128E-5A3C-4A6B-AB6C-38343A903C22}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{892F128E-5A3C-4A6B-AB6C-38343A903C22}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{892F128E-5A3C-4A6B-AB6C-38343A903C22}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{892F128E-5A3C-4A6B-AB6C-38343A903C22}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CF7FB748-8275-4DC4-9464-8FB7BBB1A6BA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CF7FB748-8275-4DC4-9464-8FB7BBB1A6BA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CF7FB748-8275-4DC4-9464-8FB7BBB1A6BA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CF7FB748-8275-4DC4-9464-8FB7BBB1A6BA}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
