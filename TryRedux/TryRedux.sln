@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Counter", "Counter\Counter.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Counter-Vanilla", "Counter-Vanilla\Counter-Vanilla.csproj", "{CF7FB748-8275-4DC4-9464-8FB7BBB1A6BA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Todos", "Todos\Todos.csproj", "{2A8E8560-9E56-497D-929D-B0AC3CB4ACBB}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{CF7FB748-8275-4DC4-9464-8FB7BBB1A6BA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{CF7FB748-8275-4DC4-9464-8FB7BBB1A6BA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{CF7FB748-8275-4DC4-9464-8FB7BBB1A6BA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2A8E8560-9E56-497D-929D-B0AC3CB4ACBB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2A8E8560-9E56-497D-929D-B0AC3CB4ACBB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2A8E8560-9E56-497D-929D-B0AC3CB4ACBB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2A8E8560-9E56-497D-929D-B0AC3CB4ACBB}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

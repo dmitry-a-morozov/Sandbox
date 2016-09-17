@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 14
+VisualStudioVersion = 14.0.25420.1
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "SqlFileTypeProvider", "SqlFileTypeProvider.fsproj", "{87E80A4C-43BE-414B-B7CE-7D374C4E2DFA}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "TestSqlFileTypeProvider", "TestSqlFileTypeProvider\TestSqlFileTypeProvider.fsproj", "{5B0CDE35-CF50-44A3-AAB3-9B8A80593D33}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{87E80A4C-43BE-414B-B7CE-7D374C4E2DFA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{87E80A4C-43BE-414B-B7CE-7D374C4E2DFA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{87E80A4C-43BE-414B-B7CE-7D374C4E2DFA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{87E80A4C-43BE-414B-B7CE-7D374C4E2DFA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5B0CDE35-CF50-44A3-AAB3-9B8A80593D33}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5B0CDE35-CF50-44A3-AAB3-9B8A80593D33}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5B0CDE35-CF50-44A3-AAB3-9B8A80593D33}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5B0CDE35-CF50-44A3-AAB3-9B8A80593D33}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
