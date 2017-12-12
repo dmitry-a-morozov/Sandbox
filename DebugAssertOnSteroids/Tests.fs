@@ -118,6 +118,23 @@ type Tests(output: ITestOutputHelper) =
             let err = Assert.Throws<Exception>( fun() ->  Debug.Assert(xs.Count() > 3)) in extractCondition err.Message
         )
 
+    [<Fact>]
+    member __.InstanceProps() =
+        let s  = "Hello"
+        Assert.Equal(
+            "\"Hello\".Length = 2", 
+            let err = Assert.Throws<Exception>( fun() ->  Debug.Assert(s.Length = 2)) in extractCondition err.Message
+        )
+
+    [<Fact>]
+    member __.Collections() =
+        let xs = [ 1 .. 3 ]
+        let ys = [ 6 .. 7 ]
+        Assert.Equal(
+            "[1; 2; 3] = [6; 7]", 
+            let err = Assert.Throws<Exception>( fun() ->  Debug.Assert((xs = ys))) in extractCondition err.Message
+        )
+
     //[<Fact>]
     //member __.Or() =
     //    let x = false
