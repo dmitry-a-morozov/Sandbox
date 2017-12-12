@@ -5,6 +5,10 @@ open System.Diagnostics
 open Xunit
 open Xunit.Abstractions
 open FSharp.Diagnostics
+open System.Linq
+
+module MyFunc = 
+    let even x = x % 2 = 0
 
 type Tests(output: ITestOutputHelper) = 
 
@@ -15,8 +19,15 @@ type Tests(output: ITestOutputHelper) =
             Trace.Listeners.Clear()
             Trace.Listeners.Add <| {
                 new DefaultTraceListener(AssertUiEnabled = false) with
-                    member __.Fail( message) = raise <| Exception(message)
+                    member __.Fail( message) = 
+                        raise <| Exception(message)
             } |> ignore
+
+    let extractCondition (s: string) = 
+        let s = s.Split('\n').[0]
+        assert s.StartsWith("Assertion ")
+        assert s.EndsWith(" failed")
+        s.Substring("Assertion ".Length, s.Length - " failed".Length - "Assertion ".Length)
 
     [<Fact>]
     member __.TrueLiteral() =
@@ -24,31 +35,105 @@ type Tests(output: ITestOutputHelper) =
 
     [<Fact>]
     member __.FalseLiteral() =
-        let err =  Assert.Throws<Exception>( fun() ->  Debug.Assert(false))
-        output.WriteLine(err.Message)
-
-    [<Fact>]
-    member __.AlwaysFalse() =
-        let err =  Assert.Throws<Exception>( fun() ->  Debug.Assert(false))
-        output.WriteLine(err.Message)
+        let err = Assert.Throws<Exception>( fun() ->  Debug.Assert(false))
+        Assert.Equal("false", extractCondition err.Message)
 
     [<Fact>]
     member __.FalseVar() =
-        let cond = false
-        let err =  Assert.Throws<Exception>( fun() ->  Debug.Assert(cond))
-        output.WriteLine(err.Message)
+        let isTrue = false
+        let err =  Assert.Throws<Exception>( fun() ->  Debug.Assert(isTrue))
+        Assert.Equal("isTrue", extractCondition err.Message)
 
     [<Fact>]
     member __.FalseLiteralEquality() =
         let err =  Assert.Throws<Exception>( fun() ->  Debug.Assert(42 = 0))
-        output.WriteLine(err.Message)
+        Assert.Equal("42 = 0", extractCondition err.Message)
 
     [<Fact>]
-    member __.FalseLiteralLess() =
-        let err =  Assert.Throws<Exception>( fun() ->  Debug.Assert(42 < 0))
-        output.WriteLine(err.Message)
+    member __.FalseLiteralLessMore() =
+        Assert.Equal(
+            "42 < 0", 
+            let err = Assert.Throws<Exception>( fun() ->  Debug.Assert(42 < 0)) in extractCondition err.Message
+        )
+        Assert.Equal(
+            "42 > 100", 
+            let err = Assert.Throws<Exception>( fun() ->  Debug.Assert(42 > 100)) in extractCondition err.Message
+        )
+        Assert.Equal(
+            "42 <= 0", 
+            let err = Assert.Throws<Exception>( fun() ->  Debug.Assert(42 <= 0)) in extractCondition err.Message
+        )
+        Assert.Equal(
+            "42 >= 100", 
+            let err = Assert.Throws<Exception>( fun() ->  Debug.Assert(42 >= 100)) in extractCondition err.Message
+        )
 
     [<Fact>]
-    member __.FalseLiteralBigger() =
-        let err =  Assert.Throws<Exception>( fun() ->  Debug.Assert(42 > 1000))
-        output.WriteLine(err.Message)
+    member __.And() =
+        let x = true
+        let y = false
+
+        Assert.Equal(
+            "x && y", 
+            let err = Assert.Throws<Exception>( fun() ->  Debug.Assert(x && y)) in extractCondition err.Message
+        )
+
+        Assert.Equal(
+            "true && false", 
+            let err = Assert.Throws<Exception>( fun() ->  Debug.Assert(true && false)) in extractCondition err.Message
+        )
+
+        Assert.Equal(
+            "x && y && false", 
+            let err = Assert.Throws<Exception>( fun() ->  Debug.Assert(x && y && false)) in extractCondition err.Message
+        )
+
+    [<Fact>]
+    member __.Not() =
+        let x = true
+        let y = true
+
+        Assert.Equal(
+            "x && not y", 
+            let err = Assert.Throws<Exception>( fun() ->  Debug.Assert(x && not y)) in extractCondition err.Message
+        )
+
+        Assert.Equal(
+            "true && not true", 
+            let err = Assert.Throws<Exception>( fun() ->  Debug.Assert(true && not true)) in extractCondition err.Message
+        )
+
+    [<Fact>]
+    member __.CustomFunctions() =
+        Assert.Equal(
+            "MyFunc.even 3", 
+            let err = Assert.Throws<Exception>( fun() ->  Debug.Assert(MyFunc.even 3)) in extractCondition err.Message
+        )
+
+    [<Fact>]
+    member __.StaticMethods() =
+        let xs  = [| 1..3 |]
+        Assert.Equal(
+            "Enumerable.Count([|1; 2; 3|]) > 3", 
+            let err = Assert.Throws<Exception>( fun() ->  Debug.Assert(xs.Count() > 3)) in extractCondition err.Message
+        )
+
+    //[<Fact>]
+    //member __.Or() =
+    //    let x = false
+    //    let y = false
+
+    //    Assert.Equal(
+    //        "x || y", 
+    //        let err = Assert.Throws<Exception>( fun() ->  Debug.Assert(x || y)) in extractCondition err.Message
+    //    )
+
+    //    Assert.Equal(
+    //        "false || false", 
+    //        let err = Assert.Throws<Exception>( fun() ->  Debug.Assert(false || false)) in extractCondition err.Message
+    //    )
+
+    //    Assert.Equal(
+    //        "x || y || false", 
+    //        let err = Assert.Throws<Exception>( fun() ->  Debug.Assert(x || y || false)) in extractCondition err.Message
+    //    )
