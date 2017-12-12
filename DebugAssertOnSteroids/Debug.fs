@@ -42,7 +42,7 @@ type Debug =
                 sprintf "%s && %s" (prettyPrintExpr lhs) (prettyPrintExpr rhs)
             | OrElse (lhs, rhs) ->
                 sprintf "%s || %s" (prettyPrintExpr lhs) (prettyPrintExpr rhs)
-            | ValueWithName(:? bool as x, _, name) -> 
+            | ValueWithName(_, _, name) -> 
                 name
             | Value(x, _) -> 
                 sprintf "%A" x 
