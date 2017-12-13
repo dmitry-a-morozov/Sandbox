@@ -12,7 +12,7 @@ module MyFunc =
 
 type Tests(output: ITestOutputHelper) = 
 
-    do
+    static do
         //(Trace.Listeners.[0] :?> DefaultTraceListener).AssertUiEnabled <- true
         Trace.Listeners.Clear()
         Trace.Listeners.Add <| {
@@ -23,9 +23,10 @@ type Tests(output: ITestOutputHelper) =
 
     let extractCondition (s: string) = 
         let s = s.Split('\n').[0]
-        assert s.StartsWith("Assertion ")
-        assert s.EndsWith(" failed")
-        s.Substring("Assertion ".Length, s.Length - " failed".Length - "Assertion ".Length)
+        let prefix, suffix = "Assertion (", ") failed"
+        assert s.StartsWith(prefix)
+        assert s.EndsWith(suffix)
+        s.Substring(prefix.Length, s.Length - suffix.Length - prefix.Length)
 
     [<Fact>]
     member __.TrueLiteral() =
@@ -123,6 +124,10 @@ type Tests(output: ITestOutputHelper) =
             "s.Length = 2", 
             let err = Assert.Throws<Exception>( fun() ->  Debug.Assert(s.Length = 2)) in extractCondition err.Message
         )
+        Assert.Equal(
+            "\"hello\".Length = 2", 
+            let err = Assert.Throws<Exception>( fun() ->  Debug.Assert("hello".Length = 2)) in extractCondition err.Message
+        )
 
     [<Fact>]
     member __.Collections() =
@@ -133,22 +138,22 @@ type Tests(output: ITestOutputHelper) =
             let err = Assert.Throws<Exception>( fun() ->  Debug.Assert((xs = ys))) in extractCondition err.Message
         )
 
-    //[<Fact>]
-    //member __.Or() =
-    //    let x = false
-    //    let y = false
+    [<Fact>]
+    member __.Or() =
+        let x = false
+        let y = false
 
-    //    Assert.Equal(
-    //        "x || y", 
-    //        let err = Assert.Throws<Exception>( fun() ->  Debug.Assert(x || y)) in extractCondition err.Message
-    //    )
+        Assert.Equal(
+            "x || y", 
+            let err = Assert.Throws<Exception>( fun() ->  Debug.Assert(x || y)) in extractCondition err.Message
+        )
 
-    //    Assert.Equal(
-    //        "false || false", 
-    //        let err = Assert.Throws<Exception>( fun() ->  Debug.Assert(false || false)) in extractCondition err.Message
-    //    )
+        Assert.Equal(
+            "false || false", 
+            let err = Assert.Throws<Exception>( fun() ->  Debug.Assert(false || false)) in extractCondition err.Message
+        )
 
-    //    Assert.Equal(
-    //        "x || y || false", 
-    //        let err = Assert.Throws<Exception>( fun() ->  Debug.Assert(x || y || false)) in extractCondition err.Message
-    //    )
+        Assert.Equal(
+            "x || y || false", 
+            let err = Assert.Throws<Exception>( fun() ->  Debug.Assert(x || y || false)) in extractCondition err.Message
+        )
