@@ -12,16 +12,14 @@ module MyFunc =
 
 type Tests(output: ITestOutputHelper) = 
 
-    static do
+    do
         //(Trace.Listeners.[0] :?> DefaultTraceListener).AssertUiEnabled <- true
-        if Trace.Listeners.Count = 1 && Trace.Listeners.[0].GetType() = typeof<DefaultTraceListener>
-        then 
-            Trace.Listeners.Clear()
-            Trace.Listeners.Add <| {
-                new DefaultTraceListener(AssertUiEnabled = false) with
-                    member __.Fail( message) = 
-                        raise <| Exception(message)
-            } |> ignore
+        Trace.Listeners.Clear()
+        Trace.Listeners.Add <| {
+            new DefaultTraceListener(AssertUiEnabled = false) with
+                member __.Fail( message) = 
+                    raise <| Exception(message)
+        } |> ignore
 
     let extractCondition (s: string) = 
         let s = s.Split('\n').[0]
