@@ -15,10 +15,9 @@ type Tests(output: ITestOutputHelper) =
     static do
         //(Trace.Listeners.[0] :?> DefaultTraceListener).AssertUiEnabled <- true
         Trace.Listeners.Clear()
-        Trace.Listeners.Add <| {
+        Trace.Listeners.Add {
             new DefaultTraceListener(AssertUiEnabled = false) with
-                member __.Fail( message) = 
-                    raise <| Exception(message)
+                member __.Fail( message) = failwith message
         } |> ignore
 
     let extractCondition (s: string) = 
